@@ -122,7 +122,6 @@ func _ready() -> void :
     hud.account_requested.connect( func(): open_screen("account"))
     hud.wiki_requested.connect( func(): open_screen("wiki"))
     hud.splash_done.connect( func(): hud.show_menu())
-    hud.classes_requested.connect( func(): open_screen("classes"))
     hud.items_requested.connect( func(): open_screen("items"))
     hud.menu_choice.connect( func(md): start_match(md))
     hud.restart_pressed.connect( func(): _restart())
@@ -341,7 +340,7 @@ func _sex_icon(sex: String) -> String:
 
 
 
-func _follow(u: Unit) -> void :
+func _follow(_u: Unit) -> void :
     _follow_timer = 1.1
 
 
@@ -1268,23 +1267,23 @@ func _build_terrain() -> void :
             var color := _tile_color(p)
             var key := color.to_html(false)
             if not batches.has(key):
-                var st := SurfaceTool.new()
-                st.begin(Mesh.PRIMITIVE_TRIANGLES)
-                batches[key] = st
+                var new_batch := SurfaceTool.new()
+                new_batch.begin(Mesh.PRIMITIVE_TRIANGLES)
+                batches[key] = new_batch
                 colors[key] = color
             var c := MapGeometry.center_xz(map, p)
-            var st: SurfaceTool = batches[key]
+            var batch_surface: SurfaceTool = batches[key]
             if map.kind_at(p) == BattleMap.Kind.SLIPPERY and map.slope_dir(p) != Vector2i.ZERO:
-                st.append_from(MapGeometry.slope_mesh(map, p), 0, Transform3D(Basis.IDENTITY, Vector3(c.x, 0, c.y)))
+                batch_surface.append_from(MapGeometry.slope_mesh(map, p), 0, Transform3D(Basis.IDENTITY, Vector3(c.x, 0, c.y)))
             else:
                 var top := MapGeometry.column_top(map, p)
                 var box := BoxMesh.new()
                 box.size = Vector3(1.0, top, 1.0)
-                st.append_from(box, 0, Transform3D(Basis.IDENTITY, Vector3(c.x, top / 2.0, c.y)))
+                batch_surface.append_from(box, 0, Transform3D(Basis.IDENTITY, Vector3(c.x, top / 2.0, c.y)))
     var mesh := ArrayMesh.new()
     for key in batches:
-        var st: SurfaceTool = batches[key]
-        st.commit(mesh)
+        var completed_batch: SurfaceTool = batches[key]
+        completed_batch.commit(mesh)
         var mat := _mat(colors[key])
         mat.cull_mode = BaseMaterial3D.CULL_DISABLED
         mesh.surface_set_material(mesh.get_surface_count() - 1, mat)

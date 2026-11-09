@@ -131,19 +131,19 @@ func _label(text: String, size := 19, color := UITheme.CREAM) -> Label:
 
 
 
-static func avatar_frame(acc: Account, scale: int) -> PanelContainer:
-    var p := PanelContainer.new()
+static func avatar_frame(acc: Account, image_scale: int) -> PanelContainer:
+    var frame := PanelContainer.new()
     var sb := StyleBoxFlat.new()
     sb.bg_color = Color(0.05, 0.07, 0.2)
     sb.border_color = acc.border_color()
     sb.set_border_width_all(4)
     sb.set_corner_radius_all(5)
     sb.set_content_margin_all(3)
-    p.add_theme_stylebox_override("panel", sb)
+    frame.add_theme_stylebox_override("panel", sb)
     var parts := acc.avatar.split("_")
-    p.add_child(UITheme.pixel_image(JobArt.face(parts[0], parts[1]), scale))
-    p.mouse_filter = Control.MOUSE_FILTER_IGNORE
-    return p
+    frame.add_child(UITheme.pixel_image(JobArt.face(parts[0], parts[1]), image_scale))
+    frame.mouse_filter = Control.MOUSE_FILTER_IGNORE
+    return frame
 
 
 func refresh() -> void :
@@ -153,7 +153,7 @@ func refresh() -> void :
     card.add_child(avatar_frame(account, 2))
     var info := VBoxContainer.new()
     info.add_child(_label(account.player_name, 22, UITheme.GOLD))
-    info.add_child(_label(("♂ masculino" if account.sex == "m" else "♀ feminino"), 17, 
+    info.add_child(_label(("♂ masculino" if account.sex == "m" else "♀ feminino"), 17,
             Color(0.55, 0.75, 1.0) if account.sex == "m" else Color(1.0, 0.6, 0.8)))
     info.add_child(_label(account.title_name(), 18))
     info.add_child(_label("Patente: " + account.rank_name(), 18, UITheme.GOLD))
