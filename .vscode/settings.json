@@ -1,14 +1,36 @@
 {
   "godot_tools.gdscript_lsp_server_port": 6005,
-  "files.exclude": { "**/.godot": true, "**/*.import": true },
-  "search.exclude": { "**/.godot": true, "build": true, "art_source": true },
+  "files.exclude": {
+    "**/.godot": true,
+    "**/*.import": true
+  },
+  "search.exclude": {
+    "**/.godot": true,
+    "build": true,
+    "art_source": true
+  },
   "files.eol": "\n",
   "editor.insertSpaces": true,
   "editor.tabSize": 4,
-  "[gdscript]": { "editor.insertSpaces": true, "editor.tabSize": 4, "editor.detectIndentation": false },
-  "[json]": { "editor.tabSize": 2 },
+  "[gdscript]": {
+    "editor.insertSpaces": true,
+    "editor.tabSize": 4,
+    "editor.detectIndentation": false
+  },
+  "[json]": {
+    "editor.tabSize": 2
+  },
   "[markdown]": {
     "editor.wordWrap": "on"
   },
-  "godotTools.editorPath.godot4": "Godot_v4.7.2-stable_win64.exe"
+  "godotTools.editorPath.godot4": "Godot_v4.7.2-stable_win64.exe",
+  "chat.permissions.default": "autopilot",
+  "chat.autopilot.advanced.enabled": true,
+  "chat.agent.sandbox.network.allowLocalNetwork": true,
+  "chat.tools.terminal.ignoreDefaultAutoApproveRules": true,
+  "chat.tools.terminal.autoApprove": {},
+  "chat.checkpoints.showFileChanges": true,
+  "inlineChat.notebookAgent": false,
+  "inlineChat.defaultModel": "Auto (copilot)",
+  "security.workspace.trust.enabled": true
 }
