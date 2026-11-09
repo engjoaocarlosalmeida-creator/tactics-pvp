@@ -1,0 +1,104 @@
+{
+  "match": {
+    "units_per_team": 4,
+    "max_turns": 900
+  },
+  "map": {
+    "width": 18,
+    "depth": 18,
+    "max_height": 6,
+    "spawn_buffer": 3,
+    "noise_frequency": 0.15,
+    "slippery_noise_threshold": 0.35,
+    "blocked_chance": 0.03,
+    "spawn_zone": 4
+  },
+  "unit_defaults": {
+    "hp": 40,
+    "atk": 12,
+    "defense": 4,
+    "speed": 8,
+    "mp": 20
+  },
+  "movement": {
+    "base_move": 4,
+    "base_jump": 2,
+    "safe_fall": 3,
+    "fall_damage_percent_per_level": 10,
+    "climb_extra_cost_per_level": 1
+  },
+  "turn": {
+    "ct_threshold": 100,
+    "cost_move": 50,
+    "cost_attack": 50,
+    "cost_wait": 50,
+    "tie_die": 6,
+    "auto_end": true
+  },
+  "combat": {
+    "attack_range": 1,
+    "height_tolerance": 2,
+    "height_damage_bonus_per_level": 1,
+    "min_damage": 1
+  },
+  "attributes": {
+    "start": 5,
+    "min": 1,
+    "max": 30,
+    "hp_per_con": 3,
+    "atk_per_attack_stat": 0.5,
+    "defense_per_con": 0.25,
+    "speed_per_agi": 0.4,
+    "innate_min": 0,
+    "innate_max": 100,
+    "innate_roll_min": 35,
+    "innate_roll_max": 65,
+    "innate_default": 50,
+    "points_per_char_level": 2,
+    "mp_per_int": 2,
+    "mp_per_wis": 1
+  },
+  "checks": {
+    "base": 50,
+    "per_point": 0.5,
+    "min": 5,
+    "max": 95
+  },
+  "progression": {
+    "job_xp_thresholds": [
+      0,
+      30,
+      80,
+      150,
+      250
+    ],
+    "char_xp_base": 20,
+    "max_char_level": 99,
+    "xp_per_attack": 5,
+    "xp_per_kill": 10,
+    "xp_mod_cap_percent": 20,
+    "xp_flag_percent": 5
+  },
+  "items": {
+    "capacity_base": 6,
+    "capacity_per_forca": 2,
+    "free_fraction": 0.5,
+    "step_fraction": 0.25,
+    "max_overload": 1.5
+  },
+  "reactions": {
+    "dodge_base": 10,
+    "parry_base": 8,
+    "block_base": 10,
+    "oa_base": 20,
+    "per_point": 2.0,
+    "min": 2,
+    "max": 60,
+    "front_bonus_pct": 10,
+    "flank_penalty_pct": 10,
+    "back_penalty_pct": 10,
+    "second_ratio": 9,
+    "second_chance": 50,
+    "extra_move": 2
+  }
+}

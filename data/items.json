@@ -1,0 +1,58 @@
+{
+  "espada_curta": {
+    "name": "Espada curta",
+    "weight": 3,
+    "kind": "arma",
+    "desc": "Lâmina leve de uma mão.",
+    "icon": "sword"
+  },
+  "arco_curto": {
+    "name": "Arco curto",
+    "weight": 2,
+    "kind": "arma",
+    "desc": "Arco simples.",
+    "icon": "bow"
+  },
+  "cajado": {
+    "name": "Cajado",
+    "weight": 3,
+    "kind": "arma",
+    "desc": "Cajado de madeira.",
+    "icon": "staff"
+  },
+  "escudo_madeira": {
+    "name": "Escudo de madeira",
+    "weight": 4,
+    "kind": "escudo",
+    "desc": "Escudo redondo.",
+    "icon": "shield"
+  },
+  "armadura_couro": {
+    "name": "Armadura de couro",
+    "weight": 5,
+    "kind": "armadura",
+    "desc": "Proteção leve.",
+    "icon": "armor_leather"
+  },
+  "armadura_ferro": {
+    "name": "Armadura de ferro",
+    "weight": 10,
+    "kind": "armadura",
+    "desc": "Proteção pesada.",
+    "icon": "armor_iron"
+  },
+  "pocao": {
+    "name": "Poção",
+    "weight": 1,
+    "kind": "consumivel",
+    "desc": "Frasco de cura.",
+    "icon": "potion"
+  },
+  "corda": {
+    "name": "Corda",
+    "weight": 2,
+    "kind": "misc",
+    "desc": "Corda resistente.",
+    "icon": "rope"
+  }
+}

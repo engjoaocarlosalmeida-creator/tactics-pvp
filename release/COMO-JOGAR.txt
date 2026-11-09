@@ -1,0 +1,23 @@
+TACTICS PVP - versao jogavel (veja VERSAO.txt)
+
+COMO ABRIR
+- De dois cliques em TacticsPVP.exe. Nao precisa instalar nada.
+- Se o Windows avisar "protegeu seu PC": "Mais informacoes" > "Executar assim mesmo".
+
+NOVO NESTA VERSAO (0.9.0): MECANICAS DE COMBATE
+- Direcao: cada personagem esta virado para um lado (cone na base). Ao terminar o turno voce escolhe o lado
+  (clique numa casa vizinha, use as setas, Enter/Esc mantem).
+- Esquiva (verde), parry (amarelo) e bloqueio (marrom): todo ataque faz o teste em segundo plano e o resultado
+  aparece como texto flutuante. Ataque de frente: defesa +10%; de lado ou pelas costas: ataque +10%.
+- Reacoes (so uma por turno): ataque de oportunidade ao sair do lado de um inimigo, contra-ataque no parry,
+  queda no bloqueio de golpe muito forte (Levantar gasta o movimento) e movimento extra na esquiva de golpe muito forte
+  (escolha uma casa verde ou cancele). O jogo nao explica essas regras: a intencao e aprender jogando.
+
+JA EXISTENTE
+- Barra de acao (mover 50%, atacar 50%), mapa 18x18, nomes sorteados, dois niveis, XP por acao,
+  tela de abertura, conta, wiki (?), itens com peso, classes, online por IP.
+
+CONTROLES
+- Clique no personagem: menu (Mover, Atacar, Itens, Esperar). Botao direito = Esc. Roda = zoom.
+- Botao direito arrastando gira a camera; WASD/setas movem; Shift+setas alterna personagem; Shift segurado centraliza.
+- Online: Jogar online > Hospedar / Entrar (porta 24577).

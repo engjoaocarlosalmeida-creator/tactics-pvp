@@ -1,0 +1,15 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    { "label": "Jogo: abrir", "type": "shell", "command": "powershell -NoProfile -ExecutionPolicy Bypass -File \"${workspaceFolder}\\tools\\run_game.ps1\"", "problemMatcher": [] },
+    { "label": "Jogo: demo computador x computador", "type": "shell", "command": "powershell -NoProfile -ExecutionPolicy Bypass -File \"${workspaceFolder}\\tools\\run_game.ps1\" -Demo", "problemMatcher": [] },
+    { "label": "Testes: suite completa (Windows)", "type": "shell", "command": "powershell -NoProfile -ExecutionPolicy Bypass -File \"${workspaceFolder}\\tools\\test.ps1\"", "group": "test", "problemMatcher": [] },
+    { "label": "Testes: filtrar por nome (Windows)", "type": "shell", "command": "powershell -NoProfile -ExecutionPolicy Bypass -File \"${workspaceFolder}\\tools\\test.ps1\" -Filter ${input:filtroTeste}", "group": "test", "problemMatcher": [] },
+    { "label": "Testes: suite completa (Linux/macOS/WSL/Git Bash)", "type": "shell", "command": "bash tools/test.sh", "group": "test", "problemMatcher": [] },
+    { "label": "Testes: rede (duas copias do jogo)", "type": "shell", "command": "bash tools/net_test.sh", "problemMatcher": [] },
+    { "label": "Entrega: exportar e empacotar (Linux)", "type": "shell", "command": "bash tools/entregar.sh", "problemMatcher": [] }
+  ],
+  "inputs": [
+    { "id": "filtroTeste", "type": "promptString", "description": "Parte do nome do arquivo de teste (ex.: combat, match, turns)" }
+  ]
+}

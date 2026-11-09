@@ -1,0 +1,18 @@
+# Godot
+.godot/
+.import/
+*.import
+*.translation
+export_credentials.cfg
+# Builds e capturas geradas
+build/
+# Executaveis locais do Godot (nao versionar binarios da engine)
+Godot_v4.7.2-stable_win64.exe
+Godot_v4.7.2-stable_win64_console.exe
+# Editor
+.idea/
+# Sistema
+.DS_Store
+Thumbs.db
+__pycache__/
+*.pyc

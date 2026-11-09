@@ -1,0 +1,135 @@
+{
+  "escudeiro": {
+    "name": "Escudeiro",
+    "tier": 1,
+    "parent": null,
+    "mods": {
+      "hp": 6,
+      "atk": 0,
+      "defense": 2,
+      "speed": 0,
+      "move": 0,
+      "jump": 0,
+      "range": 0
+    },
+    "attack_stat": "forca",
+    "desc": "Defensor resistente. Base para Cavaleiro e Arqueiro."
+  },
+  "aprendiz": {
+    "name": "Aprendiz",
+    "tier": 1,
+    "parent": null,
+    "mods": {
+      "hp": -4,
+      "atk": 0,
+      "defense": 0,
+      "speed": 1,
+      "move": 0,
+      "jump": 0,
+      "range": 0
+    },
+    "attack_stat": "inteligencia",
+    "desc": "Estudioso de pouca vida e muita curiosidade. Base para Sacerdote e Mago."
+  },
+  "lutador": {
+    "name": "Lutador",
+    "tier": 1,
+    "parent": null,
+    "mods": {
+      "hp": 2,
+      "atk": 2,
+      "defense": 0,
+      "speed": 1,
+      "move": 0,
+      "jump": 0,
+      "range": 0
+    },
+    "attack_stat": "forca",
+    "desc": "Combatente ágil e direto. Base para o Ladrão."
+  },
+  "cavaleiro": {
+    "name": "Cavaleiro",
+    "tier": 2,
+    "parent": "escudeiro",
+    "requires_level": 3,
+    "mods": {
+      "hp": 8,
+      "atk": 2,
+      "defense": 3,
+      "speed": 0,
+      "move": -1,
+      "jump": 0,
+      "range": 0
+    },
+    "attack_stat": "forca",
+    "desc": "Blindado e lento, aguenta o front da batalha."
+  },
+  "arqueiro": {
+    "name": "Arqueiro",
+    "tier": 2,
+    "parent": "escudeiro",
+    "requires_level": 3,
+    "mods": {
+      "hp": 0,
+      "atk": 1,
+      "defense": 0,
+      "speed": 1,
+      "move": 0,
+      "jump": 0,
+      "range": 2
+    },
+    "attack_stat": "forca",
+    "desc": "Ataca de longe com precisão (alcance 3)."
+  },
+  "sacerdote": {
+    "name": "Sacerdote",
+    "tier": 2,
+    "parent": "aprendiz",
+    "requires_level": 3,
+    "mods": {
+      "hp": 2,
+      "atk": 0,
+      "defense": 1,
+      "speed": 0,
+      "move": 0,
+      "jump": 0,
+      "range": 0
+    },
+    "attack_stat": "sabedoria",
+    "desc": "Apoio de fé forte; o ataque básico usa Sabedoria."
+  },
+  "mago": {
+    "name": "Mago",
+    "tier": 2,
+    "parent": "aprendiz",
+    "requires_level": 3,
+    "mods": {
+      "hp": -2,
+      "atk": 0,
+      "defense": 0,
+      "speed": 0,
+      "move": 0,
+      "jump": 0,
+      "range": 1
+    },
+    "attack_stat": "inteligencia",
+    "desc": "Estudioso das artes arcanas; ataca a 2 casas usando Inteligência."
+  },
+  "ladrao": {
+    "name": "Ladrão",
+    "tier": 2,
+    "parent": "lutador",
+    "requires_level": 3,
+    "mods": {
+      "hp": 0,
+      "atk": 1,
+      "defense": 0,
+      "speed": 3,
+      "move": 1,
+      "jump": 1,
+      "range": 0
+    },
+    "attack_stat": "forca",
+    "desc": "Muito veloz, anda mais longe e pula mais alto."
+  }
+}

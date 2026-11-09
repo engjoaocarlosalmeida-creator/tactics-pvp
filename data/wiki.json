@@ -1,0 +1,64 @@
+{
+ "topics": [
+  {
+   "id": "visao",
+   "title": "Visão geral",
+   "text": "[b]Tactics PVP[/b] é um jogo de tática por turnos em mapas 3D gerados proceduralmente. Dois times de 4 personagens começam em áreas opostas do mapa. Vence quem derrotar todas as unidades do outro time.\\n\\nVocê pode jogar em 2 no mesmo PC, contra o computador ou online (2 PCs). Os personagens evoluem entre as partidas."
+  },
+  {
+   "id": "turnos",
+   "title": "Turnos e barra de ação",
+   "text": "Cada personagem tem uma [b]barra de ação[/b] que começa cheia. A [b]velocidade[/b] enche a barra de novo depois que o personagem age: quanto mais rápido, mais vezes ele joga.\\n\\n[b]Mover[/b] gasta metade da barra e [b]atacar[/b] gasta a outra metade. Atacar sem se mover gasta só metade e faz o personagem jogar de novo mais cedo. [b]Esperar[/b] passa o turno gastando o mínimo.\\n\\nSe dois personagens têm a mesma velocidade, um sorteio de 1 a 6 em segundo plano decide quem age primeiro.\\n\\nO número à esquerda da barra de vida mostra quantos turnos faltam para o personagem agir (0 = é a vez dele)."
+  },
+  {
+   "id": "movimento",
+   "title": "Movimento",
+   "text": "O movimento pode ser dividido em partes: você pode andar um pouco, atacar e andar de novo, até gastar todos os pontos de movimento. Quando não sobra movimento (e não há alvo a atacar), o turno passa sozinho.\\n\\nAo escolher uma casa, o personagem anda até lá e o jogo pergunta se você confirma. Se cancelar, ele volta para onde estava.\\n\\nSubir custa mais movimento e só dá para subir até a altura do pulo do personagem. Descer é livre, mas quedas altas causam dano."
+  },
+  {
+   "id": "ataque",
+   "title": "Ataque",
+   "text": "O alcance do ataque aparece marcado no mapa quando você escolhe Atacar. Vale atacar inimigos, aliados e casas vazias. O dano é o ataque do atacante menos a defesa do alvo, com bônus ou penalidade pela diferença de altura.\\n\\nClicar num inimigo que só dá para alcançar andando abre a janela dele; ao confirmar o ataque, o personagem anda sozinho até uma casa de onde consegue atingir."
+  },
+  {
+   "id": "terreno",
+   "title": "Terreno",
+   "text": "Cada casa tem uma [b]altura[/b]. Rochas escuras bloqueiam o caminho. Casas azul-claras inclinadas são [b]rampas escorregadias[/b]: quem pisa nelas desliza na direção da descida até chão normal, um obstáculo ou uma subida.\\n\\nO personagem aguenta quedas de até 3 níveis sem dano; acima disso perde 10% da vida máxima por nível extra."
+  },
+  {
+   "id": "atributos",
+   "title": "Atributos e níveis",
+   "text": "Atributos que evoluem: agilidade, força, constituição, carisma, inteligência e sabedoria. Constituição aumenta vida e defesa, agilidade aumenta a velocidade, e força, inteligência ou sabedoria aumentam o ataque conforme a classe.\\n\\nCada personagem tem [b]dois níveis[/b]: o do [b]personagem[/b], que sempre sobe e dá pontos de atributo, e o da [b]classe[/b], que só sobe com a classe equipada e libera novas classes e habilidades."
+  },
+  {
+   "id": "bravura",
+   "title": "Bravura e fé",
+   "text": "Bravura e fé são atributos natos: não evoluem. A [b]fé[/b] vale para magias; a [b]bravura[/b] vale para tudo físico e mental. O jogo mostra só a classificação: baixa (menos de 50), média (50 a 70), alta (mais de 70) e muito alta (mais de 90).\\n\\nO nome do personagem é sorteado conforme o sexo, a fé e a bravura."
+  },
+  {
+   "id": "classes",
+   "title": "Classes",
+   "text": "Classes iniciais: Escudeiro, Aprendiz e Lutador. Com nível 3 na classe base, abrem-se as classes seguintes: Escudeiro leva a Cavaleiro ou Arqueiro; Aprendiz leva a Sacerdote ou Mago; Lutador leva a Ladrão.\\n\\nO menu de Classes fica no ícone no canto superior esquerdo da tela Personalizar time."
+  },
+  {
+   "id": "xp",
+   "title": "Experiência",
+   "text": "O XP vem de [b]ações[/b]: atacar um inimigo rende XP e derrotá-lo rende um bônus. Mover não dá XP, e bater em aliados ou em casas vazias também não.\\n\\nO ganho é modificado pelo nível do alvo (arredondado para baixo): alvo mais fraco rende menos, alvo mais forte rende mais, com teto de +20%. Uma seta vermelha ou verde aparece ao lado do XP quando a diferença passa de 5%."
+  },
+  {
+   "id": "itens",
+   "title": "Itens e peso",
+   "text": "Os itens ficam no estoque do jogador e cada personagem carrega alguns. Todo item tem [b]peso[/b]. A capacidade de carga cresce com a força. Acima de metade da capacidade o personagem perde movimento, e há um limite máximo de carga."
+  },
+  {
+   "id": "conta",
+   "title": "Conta e patentes",
+   "text": "A conta mostra seu nome, avatar, título e patente. As partidas jogadas e as unidades abatidas ficam registradas. Nas partidas online o rank sobe com vitórias e desce com derrotas, e a patente acompanha o rank."
+  },
+  {
+   "id": "atalhos",
+   "title": "Controles",
+   "text": "[b]Mouse:[/b] clique no personagem para abrir o menu de ações; botão direito cancela (como Esc); botão direito arrastando gira a câmera; roda dá zoom.\\n[b]Teclado:[/b] WASD ou setas movem a câmera; Q/E giram; Espaço = Esperar; Esc cancela.\\n[b]Shift + seta direita/esquerda:[/b] alterna entre personagens que podem agir. [b]Segurar Shift:[/b] a câmera centraliza em quem está jogando."
+  }
+ ]
+}
