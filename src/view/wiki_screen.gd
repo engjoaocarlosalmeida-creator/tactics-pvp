@@ -103,6 +103,8 @@ func go_back() -> void :
 
 
 func _unhandled_input(event: InputEvent) -> void :
-    if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_ESCAPE:
+
+    if event.is_action_pressed("ui_cancel"):
         get_viewport().set_input_as_handled()
         go_back()
+

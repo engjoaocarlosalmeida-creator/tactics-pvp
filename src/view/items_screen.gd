@@ -126,7 +126,7 @@ func give(item_id: String) -> bool:
 		changed.emit()
 		refresh()
 		return true
-	_msg = "%s não aguenta mais esse peso (limite %d)." % [current().display_name, 
+	_msg = "%s não aguenta mais esse peso (limite %d)." % [current().display_name,
 			Encumbrance.max_weight(rules, current().carry_capacity(rules))]
 	refresh()
 	return false

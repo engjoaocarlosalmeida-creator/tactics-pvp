@@ -32,5 +32,8 @@
   "chat.checkpoints.showFileChanges": true,
   "inlineChat.notebookAgent": false,
   "inlineChat.defaultModel": "Auto (copilot)",
-  "security.workspace.trust.enabled": true
+  "security.workspace.trust.enabled": true,
+  "yaml.schemas": {
+    "file:///c:/Users/joaoc/.vscode/extensions/continue.continue-2.0.0-win32-x64/config-yaml-schema.json": "file:///c%3A/Users/joaoc/OneDrive/Documents%20One/TactisPVP/tactics-pvp/.continue/agents/new-config-1.yaml"
+  }
 }
