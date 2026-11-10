@@ -1,5 +1,7 @@
 extends TestCase
 
+const CHARACTER_MODEL := preload("res://src/view/character_model.gd")
+
 var r := Rules.load_default()
 var views: Array[GameView] = []
 
@@ -48,6 +50,58 @@ func test_times_humanos_escolhem_o_lado_no_fim_do_turno() -> void:
     check_eq(v.m.active.id, 1, "turno passou")
     var mark: MeshInstance3D = v.unit_nodes[u.id].get_node("FacingMark")
     check((mark.basis.y - Vector3(0, 0, 1)).length() < 0.01, "o cone da base aponta para onde esta virado")
+    _cleanup()
+
+
+func test_modelos_3d_recebem_contorno_da_equipe() -> void:
+    if not needs_display():
+        return
+    var v := _make()
+    v.mode = GameView.Mode.LOCAL
+    v.setup_match(_duel([[0, 0, 0, 0, 0, 0]], Vector2i(0, 0), Vector2i(5, 0)))
+
+    for unit in v.m.units:
+        var model: Node3D = v.unit_nodes[unit.id].get_node("Body")
+        check_eq(model.scale, Vector3.ONE * CHARACTER_MODEL.MODEL_SCALE, "modelo mantem a escala esperada")
+
+        var expected_color: Color = CHARACTER_MODEL.team_color(unit.team)
+        var found_outline := false
+        for node in model.find_children("*", "MeshInstance3D", true, false):
+            var mesh_instance := node as MeshInstance3D
+            for surface in mesh_instance.mesh.get_surface_count():
+                var material := mesh_instance.get_active_material(surface) as StandardMaterial3D
+                if material == null:
+                    continue
+                var outline := material.next_pass as ShaderMaterial
+                if outline == null:
+                    continue
+                found_outline = true
+                check_eq(outline.get_shader_parameter("outline_color"), expected_color,
+                        "o contorno usa a cor do time %d" % unit.team)
+        check(found_outline, "modelo do time %d tem contorno" % unit.team)
+    _cleanup()
+
+
+func test_animacao_de_ataque_tambem_ocorre_em_casa_vazia() -> void:
+    if not needs_display():
+        return
+    var v := _make()
+    v.mode = GameView.Mode.LOCAL
+    v.setup_match(_duel([[0, 0, 0, 0, 0, 0]], Vector2i(0, 0), Vector2i(5, 0)))
+    v.animate = true
+    var attacker: Unit = v.m.units[0]
+    var body: Node3D = v.unit_nodes[attacker.id].get_node("Body")
+    var animation_player := CHARACTER_MODEL.animation_player(body)
+
+    check_eq(str(animation_player.current_animation), "Idle", "o personagem inicia em Idle")
+    check(animation_player.has_animation("walk"), "a biblioteca contem walk")
+    check(animation_player.has_animation("jump_up"), "a biblioteca contem jump_up")
+    check(animation_player.has_animation("jump_down"), "a biblioteca contem jump_down")
+    check(animation_player.has_animation("espadada_dentroparafora"), "a biblioteca contem o primeiro golpe")
+    check(animation_player.has_animation("espadada_foraparadentro"), "a biblioteca contem o segundo golpe")
+    v._on_attack_resolved(attacker, null, Vector2i(1, 0), 0)
+    check_eq(str(animation_player.current_animation), "espadada_dentroparafora",
+            "atacar uma casa vazia ainda executa o golpe")
     _cleanup()
 
 

@@ -23,6 +23,7 @@ const ATTR_HELP := {
 	"sabedoria": "ataque do Sacerdote",
 }
 const TEAM_TITLES := ["Time 1 (online e contra o computador)", "Time 2 (jogador 2, mesmo PC)"]
+const CHARACTER_MODEL := preload("res://src/view/character_model.gd")
 
 var rules: Rules
 var catalog: JobCatalog
@@ -234,13 +235,9 @@ func _refresh_detail() -> void :
 	var stage := PanelContainer.new()
 	stage.add_theme_stylebox_override("panel", UITheme.portrait_frame())
 	stage.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	stage.add_child(UITheme.pixel_image(JobArt.body(c.job_id, c.look), 3))
+	stage.custom_minimum_size = Vector2(190, 240)
+	stage.add_child(CHARACTER_MODEL.create_preview(CHARACTER_MODEL.team_color(team), Vector2i(190, 240)))
 	left.add_child(stage)
-	if not JobArt.has_own_art(c.job_id):
-		var note := _label("(arte provisória: usa a da classe base)", 16, UITheme.DIM)
-		note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		note.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		left.add_child(note)
 	var look_row := HBoxContainer.new()
 	look_row.alignment = BoxContainer.ALIGNMENT_CENTER
 	look_row.add_theme_constant_override("separation", 6)

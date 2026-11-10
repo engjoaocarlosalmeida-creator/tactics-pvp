@@ -9,6 +9,7 @@ signal closed
 signal open_other(kind: String, char_index: int)
 
 const MOD_NAMES := {"hp": "HP", "atk": "ATK", "defense": "DEF", "speed": "VEL", "move": "MOV", "jump": "PULO", "range": "ALC"}
+const CHARACTER_MODEL := preload("res://src/view/character_model.gd")
 
 var rules: Rules
 var catalog: JobCatalog
@@ -174,14 +175,15 @@ func _refresh_detail() -> void :
     var jid := selected_job
     var job: Dictionary = catalog.jobs[jid]
     var c := character()
-    var look := c.look if c != null else "m"
     var row := HBoxContainer.new()
     row.add_theme_constant_override("separation", 18)
     _detail_box.add_child(row)
     var stage := PanelContainer.new()
     stage.add_theme_stylebox_override("panel", UITheme.portrait_frame())
     stage.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
-    stage.add_child(UITheme.pixel_image(JobArt.body(jid, look), 3))
+    stage.custom_minimum_size = Vector2(220, 280)
+    var team := floori(float(context_index) / 4.0) if context_index >= 0 else 0
+    stage.add_child(CHARACTER_MODEL.create_preview(CHARACTER_MODEL.team_color(team), Vector2i(220, 280)))
     row.add_child(stage)
     var info := VBoxContainer.new()
     info.add_theme_constant_override("separation", 6)
@@ -189,9 +191,6 @@ func _refresh_detail() -> void :
     row.add_child(info)
     info.add_child(_label(str(job.name), 30, UITheme.GOLD))
     info.add_child(_label(str(job.get("desc", "")), 19, UITheme.CREAM, 640))
-    if not JobArt.has_own_art(jid):
-        info.add_child(_label("(arte provisória: usa a da classe base)", 16, UITheme.DIM))
-
     var mods: Dictionary = job.mods
     var parts: Array[String] = []
     for k in ["hp", "atk", "defense", "speed", "move", "jump", "range"]:

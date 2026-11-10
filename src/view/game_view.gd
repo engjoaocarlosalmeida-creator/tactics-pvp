@@ -1,4 +1,4 @@
-## CAMADA VISUAL E DE ENTRADA DA PARTIDA. Desenha o MatchState (terreno em lote, sprites, barras,
+## CAMADA VISUAL E DE ENTRADA DA PARTIDA. Desenha o MatchState (terreno em lote, personagens 3D, barras,
 ## ponteiro, marcadores), trata cliques/teclado, fluxos de mover/atacar com confirmacao, lado,
 ## movimento extra, rede e conta. Nao contem regras. Opcoes de linha de comando: --mode=local|cpu|demo
 ## --seed=N --shot=arquivo.png --bot-turns=N --net=host|join --ip= --port= --auto-play --quit-on-end
@@ -12,11 +12,14 @@ extends Node3D
 
 enum Mode{LOCAL, VS_CPU, DEMO, ONLINE}
 
+const CHARACTER_MODEL := preload("res://src/view/character_model.gd")
 const TEAM_COLORS: Array[Color] = [Color(0.25, 0.55, 1.0), Color(1.0, 0.35, 0.3)]
 const TEAM_NAMES: Array[String] = ["Azul", "Vermelho"]
 const SPRITE_H := 2.0
 const ALLY_COLOR := Color(0.3, 0.62, 1.0)
 const ENEMY_COLOR := Color(0.95, 0.28, 0.25)
+const ATTACK_ANIMATIONS := ["espadada_dentroparafora", "espadada_foraparadentro"]
+const WALK_STEP_DURATION := 0.16
 
 var animate := true
 var test_mode := false
@@ -39,6 +42,8 @@ var camera: Camera3D
 var hud: Hud
 
 var unit_nodes := {}
+var _attack_animation_index := {}
+var _attack_animations := {}
 var move_tiles := {}
 var target_tiles := {}
 var hover := Picking.NONE
@@ -314,6 +319,7 @@ func setup_match(state: MatchState) -> void :
     m.unit_moved.connect(_on_unit_moved)
     m.unit_hurt.connect(_on_unit_hurt)
     m.unit_died.connect(_on_unit_died)
+    m.attack_resolved.connect(_on_attack_resolved)
     m.match_over.connect(_on_match_over)
     m.reaction_event.connect(_on_reaction_event)
     m.manual_facing_teams = _manual_teams()   # quem joga escolhe o lado ao fim do turno
@@ -524,13 +530,7 @@ func _preview_move(p: Vector2i) -> void :
         n.position = MapGeometry.tile_pos(m.map, p)
         ask.call()
         return
-    busy += 1
-    var tw := create_tween()
-    for q in path:
-        tw.tween_property(n, "position", MapGeometry.tile_pos(m.map, q), 0.14)
-    tw.finished.connect( func():
-        busy = maxi(0, busy - 1)
-        ask.call())
+    _animate_unit_path(u, path, ask)
 
 
 func _commit_preview() -> void :
@@ -548,7 +548,10 @@ func _cancel_preview() -> void :
     if preview.is_empty():
         return
     var u: Unit = preview["unit"]
-    unit_nodes[u.id].position = MapGeometry.tile_pos(m.map, preview["from"])
+    var node: Node3D = unit_nodes[u.id]
+    node.position = MapGeometry.tile_pos(m.map, preview["from"])
+    CHARACTER_MODEL.play_animation(node.get_node("Body"), "Idle")
+    CHARACTER_MODEL.set_facing(node.get_node("Body"), u.facing)
     preview = {}
 
 
@@ -644,7 +647,7 @@ func _open_target_window(t: Unit) -> void :
     var data := {
         "title": t.display_name,
         "sex": t.look,
-        "body": JobArt.body(t.job_id, t.look),
+        "team": t.team,
         "hp": t.hp, "max_hp": t.max_hp,
         "text": "Nível %d · %s nv %d\n%s" % [t.char_level, _job_name(t), t.job_level, _player_name(t.team)],
         "stats": "ATK %d  DEF %d  VEL %d\nMOV %d  PULO %d  ALC %d\n[color=#8d95b8][font_size=15]Bravura %s · Fé %s[/font_size][/color]" % [
@@ -878,14 +881,85 @@ func _on_turn_started(u: Unit) -> void :
 
 func _on_unit_moved(u: Unit, path: Array) -> void :
     var n: Node3D = unit_nodes[u.id]
+    _update_facing_mark(u)
     if _committing_unit == u.id or not animate or path.is_empty():
         n.position = MapGeometry.tile_pos(m.map, u.pos)
+        CHARACTER_MODEL.play_animation(n.get_node("Body"), "Idle")
         return
+
+    _animate_unit_path(u, path)
+
+
+func _animate_unit_path(u: Unit, path: Array, on_finished := Callable()) -> void:
+    var node: Node3D = unit_nodes[u.id]
+    var body: Node3D = node.get_node("Body")
+    var previous := Vector2i(
+            roundi(node.position.x + float(m.map.width) / 2.0 - 0.5),
+            roundi(node.position.z + float(m.map.depth) / 2.0 - 0.5))
     busy += 1
     var tw := create_tween()
-    for p in path:
-        tw.tween_property(n, "position", MapGeometry.tile_pos(m.map, p), 0.16)
-    tw.finished.connect(_anim_done)
+    for point in path:
+        var step: Vector2i = point
+        var height_delta := m.map.height_at(step) - m.map.height_at(previous)
+        var action := CHARACTER_MODEL.locomotion_action(height_delta)
+        var duration := WALK_STEP_DURATION
+        if height_delta != 0:
+            duration = clampf(CHARACTER_MODEL.animation_duration(body, action) * 0.3, 0.3, 0.65)
+        var direction := step - previous
+        tw.tween_callback(_face_unit_for_step.bind(u.id, direction))
+        tw.tween_callback(_play_unit_animation.bind(u.id, action, duration))
+        tw.tween_property(node, "position", MapGeometry.tile_pos(m.map, step), duration)
+        previous = step
+    tw.tween_callback(_finish_unit_movement.bind(u.id))
+    tw.finished.connect(func():
+        busy = maxi(0, busy - 1)
+        if on_finished.is_valid():
+            on_finished.call()
+        else:
+            _try_refresh())
+
+
+func _face_unit_for_step(unit_id: int, direction: Vector2i) -> void:
+    if unit_nodes.has(unit_id):
+        CHARACTER_MODEL.set_facing(unit_nodes[unit_id].get_node("Body"), direction)
+
+
+func _play_unit_animation(unit_id: int, action: String, duration: float) -> void:
+    if unit_nodes.has(unit_id):
+        CHARACTER_MODEL.play_animation(unit_nodes[unit_id].get_node("Body"), action, duration)
+
+
+func _finish_unit_movement(unit_id: int) -> void:
+    if unit_nodes.has(unit_id):
+        CHARACTER_MODEL.play_animation(unit_nodes[unit_id].get_node("Body"), "Idle")
+
+
+func _on_attack_resolved(attacker: Unit, _target: Unit, _tile: Vector2i, _damage: int) -> void:
+    if not animate or not unit_nodes.has(attacker.id):
+        return
+    if _attack_animations.has(attacker.id):
+        _attack_animations.erase(attacker.id)
+        busy = maxi(0, busy - 1)
+
+    var index := int(_attack_animation_index.get(attacker.id, 0))
+    var action: String = ATTACK_ANIMATIONS[index % ATTACK_ANIMATIONS.size()]
+    _attack_animation_index[attacker.id] = index + 1
+    var node: Node3D = unit_nodes[attacker.id]
+    _update_facing_mark(attacker)
+    if not CHARACTER_MODEL.play_animation(node.get_node("Body"), action):
+        return
+
+    _attack_animations[attacker.id] = action
+    busy += 1
+
+
+func _on_unit_animation_finished(animation_name: StringName, unit_id: int) -> void:
+    if not _attack_animations.has(unit_id) or _attack_animations[unit_id] != str(animation_name):
+        return
+    _attack_animations.erase(unit_id)
+    if unit_nodes.has(unit_id):
+        CHARACTER_MODEL.play_animation(unit_nodes[unit_id].get_node("Body"), "Idle")
+    _anim_done()
 
 
 func _on_unit_hurt(u: Unit, amount: int, reason: String) -> void :
@@ -895,10 +969,7 @@ func _on_unit_hurt(u: Unit, amount: int, reason: String) -> void :
     var node: Node3D = unit_nodes[u.id]
     _float_text(node.position, "-%d" % amount, Color(1, 0.4, 0.3))
     if animate:
-        var body: Sprite3D = node.get_node("Body")
-        body.modulate = Color(1, 0.35, 0.35)
-        var tw := create_tween()
-        tw.tween_property(body, "modulate", Color.WHITE, 0.3)
+        CHARACTER_MODEL.flash(node.get_node("Body"), create_tween())
 
 
 func _on_unit_died(u: Unit) -> void :
@@ -1233,6 +1304,8 @@ func _clear_world() -> void :
             root.remove_child(c)
             c.queue_free()
     unit_nodes.clear()
+    _attack_animation_index.clear()
+    _attack_animations.clear()
     move_tiles.clear()
     target_tiles.clear()
     hover_marker.visible = false
@@ -1293,17 +1366,13 @@ func _build_terrain() -> void :
 func _build_units() -> void :
     for u in m.units:
         var n := Node3D.new()
-        var tex := JobArt.body(u.job_id, u.look)
-        var spr := Sprite3D.new()
-        spr.name = "Body"
-        spr.texture = tex
-        spr.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-        spr.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
-        spr.alpha_cut = SpriteBase3D.ALPHA_CUT_DISCARD
-        spr.shaded = false
-        spr.pixel_size = SPRITE_H / maxf(1.0, float(tex.get_height()))
-        spr.position.y = SPRITE_H / 2.0
-        n.add_child(spr)
+        var model := CHARACTER_MODEL.create_model(TEAM_COLORS[u.team])
+        if model == null:
+            continue
+        CHARACTER_MODEL.set_facing(model, u.facing)
+        var animation_player := CHARACTER_MODEL.animation_player(model)
+        animation_player.animation_finished.connect(_on_unit_animation_finished.bind(u.id))
+        n.add_child(model)
         var disc := MeshInstance3D.new()
         var cyl := CylinderMesh.new()
         cyl.top_radius = 0.34
@@ -1386,6 +1455,7 @@ func _build_units() -> void :
         n.position = MapGeometry.tile_pos(m.map, u.pos)
         units_root.add_child(n)
         unit_nodes[u.id] = n
+        _update_facing_mark(u)
         _update_unit_visual(u)
 func _hp_sprite(color: Color, width_px: float, offset_x: float, height := 8, off_y := 0.0) -> Sprite3D:
     var s := Sprite3D.new()
@@ -1666,7 +1736,10 @@ func _on_reaction_event(u: Unit, kind: String, text: String) -> void:
 
 
 func _update_facing_mark(u: Unit) -> void:
-    var mark: MeshInstance3D = unit_nodes[u.id].get_node("FacingMark")
+    var node: Node3D = unit_nodes[u.id]
+    var model: Node3D = node.get_node("Body")
+    CHARACTER_MODEL.set_facing(model, u.facing)
+    var mark: MeshInstance3D = node.get_node("FacingMark")
     var f := Vector3(u.facing.x, 0, u.facing.y)
     mark.visible = u.is_alive()
     mark.position = f * 0.47 + Vector3(0, 0.14, 0)

@@ -3,7 +3,7 @@
 class_name Hud
 extends CanvasLayer
 
-
+const CHARACTER_MODEL := preload("res://src/view/character_model.gd")
 
 signal menu_choice(mode: int)
 signal restart_pressed
@@ -594,7 +594,9 @@ func show_target_window(data: Dictionary, actions: Array, view_size: Vector2) ->
 	var stage := PanelContainer.new()
 	stage.add_theme_stylebox_override("panel", UITheme.portrait_frame())
 	stage.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	stage.add_child(UITheme.pixel_image(data["body"], 2))
+	stage.custom_minimum_size = Vector2(128, 160)
+	stage.add_child(CHARACTER_MODEL.create_preview(
+			CHARACTER_MODEL.team_color(int(data["team"])), Vector2i(128, 160)))
 	row.add_child(stage)
 	var col := VBoxContainer.new()
 	col.add_theme_constant_override("separation", 4)
