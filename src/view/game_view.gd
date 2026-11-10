@@ -15,7 +15,7 @@ enum Mode{LOCAL, VS_CPU, DEMO, ONLINE}
 const CHARACTER_MODEL := preload("res://src/view/character_model.gd")
 const TEAM_COLORS: Array[Color] = [Color(0.25, 0.55, 1.0), Color(1.0, 0.35, 0.3)]
 const TEAM_NAMES: Array[String] = ["Azul", "Vermelho"]
-const SPRITE_H := 2.0
+const SPRITE_H := 1.8
 const ALLY_COLOR := Color(0.3, 0.62, 1.0)
 const ENEMY_COLOR := Color(0.95, 0.28, 0.25)
 const ATTACK_ANIMATIONS := ["espadada_dentroparafora", "espadada_foraparadentro"]
@@ -44,6 +44,9 @@ var hud: Hud
 var unit_nodes := {}
 var _attack_animation_index := {}
 var _attack_animations := {}
+var _death_animation_started := {}
+var _dying_turn_snapshots := {}
+var _visual_generation := 0
 var move_tiles := {}
 var target_tiles := {}
 var hover := Picking.NONE
@@ -921,8 +924,8 @@ func _animate_unit_path(u: Unit, path: Array, on_finished := Callable()) -> void
     var node: Node3D = unit_nodes[u.id]
     var body: Node3D = node.get_node("Body")
     var previous := Vector2i(
-            roundi(node.position.x + float(m.map.width) / 2.0 - 0.5),
-            roundi(node.position.z + float(m.map.depth) / 2.0 - 0.5))
+            roundi(node.position.x / MapGeometry.TILE_SIZE + float(m.map.width) / 2.0 - 0.5),
+            roundi(node.position.z / MapGeometry.TILE_SIZE + float(m.map.depth) / 2.0 - 0.5))
     busy += 1
     var tw := create_tween()
     for point in path:
@@ -964,10 +967,13 @@ func _finish_unit_movement(unit_id: int) -> void:
 
 
 func _on_attack_resolved(attacker: Unit, _target: Unit, _tile: Vector2i, _damage: int) -> void:
-    _queue_visual_action(Callable(self, "_present_attack_resolved").bind(attacker, attacker.facing))
+    var target_hp_before := _target.hp if _target != null else 0
+    _queue_visual_action(Callable(self, "_present_attack_resolved").bind(
+            attacker, attacker.facing, _target, _damage, target_hp_before))
 
 
-func _present_attack_resolved(attacker: Unit, facing: Vector2i) -> void:
+func _present_attack_resolved(attacker: Unit, facing: Vector2i, target: Unit = null,
+        damage: int = 0, target_hp_before: int = 0) -> void:
     if not animate or not unit_nodes.has(attacker.id):
         return
     if _attack_animations.has(attacker.id):
@@ -985,8 +991,63 @@ func _present_attack_resolved(attacker: Unit, facing: Vector2i) -> void:
     _attack_animations[attacker.id] = action
     busy += 1
     var duration := CHARACTER_MODEL.animation_duration(node.get_node("Body"), action)
+    if target != null and damage > 0:
+        var impact_delay := duration * 0.85
+        get_tree().create_timer(impact_delay).timeout.connect(
+                _present_attack_impact.bind(
+                        target, damage, target_hp_before, _visual_generation))
     get_tree().create_timer(duration + 0.25).timeout.connect(
             _finish_attack_animation.bind(attacker.id, action))
+
+
+func _present_attack_impact(target: Unit, damage: int, hp_before_hit: int,
+        generation: int = -1) -> void:
+    if (generation >= 0 and generation != _visual_generation) \
+            or damage <= 0 or not unit_nodes.has(target.id):
+        return
+    var hp_after_hit := maxi(0, hp_before_hit - damage)
+    var node: Node3D = unit_nodes[target.id]
+    var hp_fill: Sprite3D = node.get_node("Over/HpFill")
+    hp_fill.region_rect = Rect2(
+            0, 0, maxf(0.0, 80.0 * float(hp_after_hit) / maxf(1.0, float(target.max_hp))), 8)
+    hp_fill.visible = hp_after_hit > 0
+    node.get_node("Over/HpBack").visible = hp_after_hit > 0
+    hud.add_log("%s perde %d de vida (ataque)" % [target.display_name, damage])
+
+    var damage_ratio := float(damage) / maxf(1.0, float(target.max_hp))
+    var damage_size := 32 + roundi(clampf(damage_ratio, 0.0, 1.5) * 18.0)
+    _float_text(node.position, "-%d" % damage, Color(1, 0.4, 0.3), damage_size, 0.6)
+    var body := node.get_node_or_null("Body") as Node3D
+    if body != null:
+        CHARACTER_MODEL.flash(body, create_tween())
+
+    if hp_after_hit == 0:
+        _start_death_animation(target, int(_dying_turn_snapshots.get(
+                target.id, target.dying_turns)))
+
+
+func _start_death_animation(u: Unit, turns_left: int) -> void:
+    if _death_animation_started.has(u.id) or not animate or not unit_nodes.has(u.id):
+        return
+    var node: Node3D = unit_nodes[u.id]
+    var body := node.get_node_or_null("Body") as Node3D
+    if body == null:
+        return
+    var action := "death_forward" if randi_range(0, 1) == 0 else "death_back"
+    if not CHARACTER_MODEL.play_animation(body, action):
+        return
+    _death_animation_started[u.id] = action
+    _show_dying_status(u, turns_left)
+    hud.add_log("%s caiu e está morrendo (%d turnos)." % [u.display_name, turns_left])
+    busy += 1
+    var duration := CHARACTER_MODEL.animation_duration(body, action)
+    get_tree().create_timer(duration + 0.25).timeout.connect(
+            _anim_done_for_generation.bind(_visual_generation))
+
+
+func _anim_done_for_generation(generation: int) -> void:
+    if generation == _visual_generation:
+        _anim_done()
 
 
 func _on_unit_animation_finished(animation_name: StringName, unit_id: int) -> void:
@@ -1008,37 +1069,40 @@ func _on_unit_hurt(u: Unit, amount: int, reason: String) -> void :
 
 func _present_unit_hurt(u: Unit, amount: int, reason: String, hp_after_hit: int) -> void:
     var cause := "queda" if reason == "fall" else "ataque"
-    hud.add_log("%s perde %d de vida (%s)" % [u.display_name, amount, cause])
     var hp_fill: Sprite3D = unit_nodes[u.id].get_node("Over/HpFill")
     var ratio := float(hp_after_hit) / maxf(1.0, float(u.max_hp))
     hp_fill.region_rect = Rect2(0, 0, maxf(0.0, 80.0 * ratio), 8)
     hp_fill.visible = hp_after_hit > 0
+    unit_nodes[u.id].get_node("Over/HpBack").visible = hp_after_hit > 0
+    if reason == "attack" and animate:
+        return
+    hud.add_log("%s perde %d de vida (%s)" % [u.display_name, amount, cause])
     var node: Node3D = unit_nodes[u.id]
     var damage_ratio := float(amount) / maxf(1.0, float(u.max_hp))
     var damage_size := 32 + roundi(clampf(damage_ratio, 0.0, 1.5) * 18.0)
     _float_text(node.position, "-%d" % amount, Color(1, 0.4, 0.3), damage_size, 0.6)
     if animate:
-        CHARACTER_MODEL.flash(node.get_node("Body"), create_tween())
+        var body := node.get_node_or_null("Body") as Node3D
+        if body != null:
+            CHARACTER_MODEL.flash(body, create_tween())
+        if u.is_dying():
+            _start_death_animation(u, int(_dying_turn_snapshots.get(u.id, u.dying_turns)))
         _pause_visual_sequence(0.6)
 
 
 func _on_unit_died(u: Unit) -> void :
+    _dying_turn_snapshots[u.id] = u.dying_turns
     _queue_visual_action(Callable(self, "_present_unit_died").bind(u, u.dying_turns))
 
 
 func _present_unit_died(u: Unit, turns_left: int) -> void:
+    if _death_animation_started.has(u.id):
+        return
     hud.add_log("%s caiu e está morrendo (%d turnos)." % [u.display_name, turns_left])
-    var node: Node3D = unit_nodes[u.id]
     _show_dying_status(u, turns_left)
     if not animate:
         return
-    var body: Node3D = node.get_node("Body")
-    var action := "death_forward" if randi_range(0, 1) == 0 else "death_back"
-    if not CHARACTER_MODEL.play_animation(body, action):
-        return
-    busy += 1
-    var duration := CHARACTER_MODEL.animation_duration(body, action)
-    get_tree().create_timer(duration + 0.25).timeout.connect(_anim_done)
+    _start_death_animation(u, turns_left)
 
 
 func _on_unit_dying_turn(u: Unit, turns_left: int) -> void:
@@ -1064,7 +1128,10 @@ func _show_dying_status(u: Unit, turns_left: int) -> void:
     node.get_node("Over/ApFill").visible = false
     node.get_node("Over/ApBack").visible = false
     var turns: Label3D = node.get_node("Over/Turns")
-    turns.text = "Morrendo: %d" % turns_left
+    turns.text = str(turns_left)
+    turns.offset = Vector2.ZERO
+    turns.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+    turns.font_size = 52
     turns.modulate = Color(1.0, 0.35, 0.35)
     turns.visible = true
 
@@ -1079,7 +1146,7 @@ func _present_unit_expired(u: Unit) -> void:
     if body != null:
         node.remove_child(body)
         body.queue_free()
-    var skull := CHARACTER_MODEL.create_skull()
+    var skull := CHARACTER_MODEL.create_skull(CHARACTER_MODEL.team_color(u.team))
     if skull != null:
         node.add_child(skull)
     node.get_node("Ring").visible = false
@@ -1237,7 +1304,8 @@ func _refresh() -> void:
 func _add_marker(p: Vector2i, color: Color) -> void :
     var mi := MeshInstance3D.new()
     var box := BoxMesh.new()
-    box.size = Vector3(0.9, 0.04, 0.9)
+    var marker_size := MapGeometry.TILE_SIZE * 0.9
+    box.size = Vector3(marker_size, 0.04, marker_size)
     mi.mesh = box
     mi.material_override = _mat(color, true)
     mi.position = MapGeometry.tile_pos(m.map, p) + Vector3(0, 0.03, 0)
@@ -1392,7 +1460,8 @@ func _build_environment() -> void :
     add_child(overlay_root)
     hover_marker = MeshInstance3D.new()
     var hb := BoxMesh.new()
-    hb.size = Vector3(0.98, 0.06, 0.98)
+    var hover_size := MapGeometry.TILE_SIZE * 0.98
+    hb.size = Vector3(hover_size, 0.06, hover_size)
     hover_marker.mesh = hb
     hover_marker.material_override = _mat(Color(1, 1, 1, 0.3), true)
     hover_marker.visible = false
@@ -1401,8 +1470,13 @@ func _build_environment() -> void :
     click_marker = Node3D.new()
     click_marker.visible = false
     var cm := _mat(Color(1.0, 0.92, 0.25, 0.95), true)
-    for spec in [[Vector3(0, 0, -0.46), Vector3(0.9, 0.05, 0.07)], [Vector3(0, 0, 0.46), Vector3(0.9, 0.05, 0.07)],
-            [Vector3(-0.46, 0, 0), Vector3(0.07, 0.05, 0.9)], [Vector3(0.46, 0, 0), Vector3(0.07, 0.05, 0.9)]]:
+    var marker_edge := MapGeometry.TILE_SIZE * 0.46
+    var marker_length := MapGeometry.TILE_SIZE * 0.9
+    var marker_thickness := MapGeometry.TILE_SIZE * 0.07
+    for spec in [[Vector3(0, 0, -marker_edge), Vector3(marker_length, 0.05, marker_thickness)],
+            [Vector3(0, 0, marker_edge), Vector3(marker_length, 0.05, marker_thickness)],
+            [Vector3(-marker_edge, 0, 0), Vector3(marker_thickness, 0.05, marker_length)],
+            [Vector3(marker_edge, 0, 0), Vector3(marker_thickness, 0.05, marker_length)]]:
         var side := MeshInstance3D.new()
         var bm := BoxMesh.new()
         bm.size = spec[1]
@@ -1429,6 +1503,7 @@ func _update_click_marker() -> void :
 
 
 func _clear_world() -> void :
+    _visual_generation += 1
     for root in [terrain_root, units_root, overlay_root, labels_root]:
         for c in root.get_children():
             root.remove_child(c)
@@ -1436,6 +1511,8 @@ func _clear_world() -> void :
     unit_nodes.clear()
     _attack_animation_index.clear()
     _attack_animations.clear()
+    _death_animation_started.clear()
+    _dying_turn_snapshots.clear()
     _visual_queue.clear()
     _collecting_visual_events = false
     move_tiles.clear()
@@ -1483,7 +1560,7 @@ func _build_terrain() -> void :
             else:
                 var top := MapGeometry.column_top(map, p)
                 var box := BoxMesh.new()
-                box.size = Vector3(1.0, top, 1.0)
+                box.size = Vector3(MapGeometry.TILE_SIZE, top, MapGeometry.TILE_SIZE)
                 batch_surface.append_from(box, 0, Transform3D(Basis.IDENTITY, Vector3(c.x, top / 2.0, c.y)))
     var mesh := ArrayMesh.new()
     for key in batches:
@@ -1505,18 +1582,6 @@ func _build_units() -> void :
         var animation_player := CHARACTER_MODEL.animation_player(model)
         animation_player.animation_finished.connect(_on_unit_animation_finished.bind(u.id))
         n.add_child(model)
-        var disc := MeshInstance3D.new()
-        var cyl := CylinderMesh.new()
-        cyl.top_radius = 0.34
-        cyl.bottom_radius = 0.34
-        cyl.height = 0.05
-        disc.mesh = cyl
-        var dmat := StandardMaterial3D.new()
-        dmat.albedo_color = TEAM_COLORS[u.team]
-        dmat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-        disc.material_override = dmat
-        disc.position.y = 0.025
-        n.add_child(disc)
         var ring := MeshInstance3D.new()
         ring.name = "Ring"
         var torus := TorusMesh.new()
@@ -1605,10 +1670,12 @@ func _update_unit_visual(u: Unit) -> void :
     var ally := u.team == ally_team()
     var col := ALLY_COLOR if ally else ENEMY_COLOR
     var fill: Sprite3D = n.get_node("Over/HpFill")
+    var hp_back: Sprite3D = n.get_node("Over/HpBack")
     var ap: Sprite3D = n.get_node("Over/ApFill")
     var turns: Label3D = n.get_node("Over/Turns")
     if u.is_expired():
         fill.visible = false
+        hp_back.visible = false
         ap.visible = false
         n.get_node("Over/ApBack").visible = false
         turns.visible = false
@@ -1616,12 +1683,16 @@ func _update_unit_visual(u: Unit) -> void :
     var ratio := float(u.hp) / maxf(1.0, float(u.max_hp))
     fill.region_rect = Rect2(0, 0, maxf(0.0, 80.0 * ratio), 8)
     fill.modulate = col
-    fill.visible = u.is_alive()
+    fill.visible = u.hp > 0 and u.is_alive()
+    hp_back.visible = fill.visible
     ap.region_rect = Rect2(0, 0, 80.0 * _action_remaining(u), 4)
     ap.visible = u.hp > 0
     n.get_node("Over/ApBack").visible = u.hp > 0
     if u.is_dying():
-        turns.text = "Morrendo: %d" % u.dying_turns
+        turns.text = str(u.dying_turns)
+        turns.offset = Vector2.ZERO
+        turns.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+        turns.font_size = 52
         turns.modulate = Color(1.0, 0.35, 0.35)
         turns.visible = true
         return
@@ -1727,7 +1798,11 @@ func _update_overheads() -> void :
     for id in unit_nodes:
         var n: Node3D = unit_nodes[id]
         var over: Node3D = n.get_node("Over")
-        over.global_position = n.global_position + Vector3(0, SPRITE_H * 0.5, 0) + up * (SPRITE_H * 0.5 + 0.14)
+        var u := m.unit_by_id(int(id))
+        if u != null and u.is_dying():
+            over.global_position = n.global_position + Vector3(0, 0.35, 0)
+        else:
+            over.global_position = n.global_position + Vector3(0, SPRITE_H * 0.5, 0) + up * (SPRITE_H * 0.5 + 0.14)
         var pointer: Label3D = over.get_node("Pointer")
         if pointer.visible:
             pointer.offset.y = 62.0 + sin(_t * 5.0) * 7.0

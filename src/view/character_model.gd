@@ -4,7 +4,7 @@ const MODEL_PATH := "res://assets/models/animations/Arhcer_MASC_Idle.fbx"
 const ANIMATIONS_PATH := "res://assets/models/character_animations.tres"
 const SKULL_PATH := "res://assets/models/skull.glb"
 const CHARACTER_TEXTURE: Texture2D = preload("res://assets/models/Ranger_ranger_texture.png")
-const MODEL_SCALE := 85.0
+const MODEL_SCALE := 76.5
 const BLUE_TEAM_COLOR := Color(0.25, 0.55, 1.0)
 const RED_TEAM_COLOR := Color(1.0, 0.35, 0.3)
 const OUTLINE_SHADER: Shader = preload("res://assets/shaders/team_outline.gdshader")
@@ -52,7 +52,7 @@ static func create_model(outline_color: Color) -> Node3D:
     return model
 
 
-static func create_skull() -> Node3D:
+static func create_skull(outline_color: Color) -> Node3D:
     var resource := load(SKULL_PATH)
     if not resource is PackedScene:
         push_error("O modelo da caveira nao foi importado como uma cena: " + SKULL_PATH)
@@ -62,8 +62,8 @@ static func create_skull() -> Node3D:
         push_error("A cena da caveira nao possui uma raiz Node3D.")
         return null
     skull.name = "Skull"
-    skull.scale = Vector3.ONE * 2.0
-    skull.position.y = 0.5
+    skull.scale = Vector3.ONE * 0.5
+    _apply_outline(skull, outline_color, false)
     return skull
 
 
@@ -166,7 +166,8 @@ static func flash(model: Node3D, tween: Tween) -> void:
             tween.tween_property(material, "albedo_color", original_color, 0.3)
 
 
-static func _apply_outline(model: Node3D, outline_color: Color) -> void:
+static func _apply_outline(model: Node3D, outline_color: Color,
+        replace_texture := true) -> void:
     var outline_material := ShaderMaterial.new()
     outline_material.shader = OUTLINE_SHADER
     outline_material.set_shader_parameter("outline_color", outline_color)
@@ -181,7 +182,7 @@ static func _apply_outline(model: Node3D, outline_color: Color) -> void:
             if original_material == null:
                 continue
             var material := original_material.duplicate() as Material
-            if material is StandardMaterial3D:
+            if replace_texture and material is StandardMaterial3D:
                 material.albedo_texture = CHARACTER_TEXTURE
             material.next_pass = outline_material
             mesh_instance.set_surface_override_material(surface, material)

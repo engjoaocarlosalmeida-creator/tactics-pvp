@@ -135,35 +135,56 @@ func test_vitoria_e_fim_de_partida() -> void:
             Vector2i(1, 1), Vector2i(2, 1))
     s.units[1].hp = 1
     var seen := []
-    var dying_turns_seen: Array[int] = []
     var initial_dying_turns := [-1]
     s.match_over.connect(func(w): seen.append(w))
     s.unit_died.connect(func(unit):
         if unit.id == 1:
             initial_dying_turns[0] = unit.dying_turns)
-    s.unit_dying_turn.connect(func(unit, turns_left):
-        if unit.id == 1:
-            dying_turns_seen.append(turns_left))
     check(s.attack(0, 1).ok, "golpe final")
-    check(not s.is_over(), "o personagem fica morrendo antes da vitoria")
+    check(s.is_over(), "a partida termina quando o ultimo inimigo cai")
     check(s.units[1].is_dying(), "HP zero inicia o estado morrendo")
     check(initial_dying_turns[0] >= 2 and initial_dying_turns[0] <= 7,
             "a duracao fica entre 2 e 7 turnos")
     check_eq(s.units[1].hp, 0, "HP permanece em zero")
+    check_eq(s.winner, 0, "time 0 venceu")
+    check_eq(seen, [0], "sinal emitido uma vez")
+    check_eq(s.attack(0, 1).error, "match_over", "nada apos o fim")
+    check_eq(s.move(0, Vector2i(0, 0)).error, "match_over", "nada apos o fim")
 
+
+func test_contagem_do_caido_continua_enquanto_houver_outros_inimigos() -> void:
+    var map := TestUtil.map_from([[0, 0, 0, 0]])
+    var attacker := TestUtil.unit(0, 0, Vector2i(0, 0), r)
+    var fallen := TestUtil.unit(1, 1, Vector2i(1, 0), r)
+    var remaining_enemy := TestUtil.unit(2, 1, Vector2i(3, 0), r)
+    attacker.speed = 10
+    fallen.speed = 9
+    remaining_enemy.speed = 8
+    fallen.hp = 1
+    var s := MatchState.from_parts(r, map, [attacker, fallen, remaining_enemy])
+    s.start()
+    var dying_turns_seen: Array[int] = []
+    var initial_dying_turns := [-1]
+    s.unit_died.connect(func(unit):
+        if unit.id == fallen.id:
+            initial_dying_turns[0] = unit.dying_turns)
+    s.unit_dying_turn.connect(func(unit, turns_left):
+        if unit.id == fallen.id:
+            dying_turns_seen.append(turns_left))
+
+    check(s.attack(attacker.id, fallen.id).ok, "o ataque derruba uma unidade")
+    check(not s.is_over(), "outro inimigo vivo impede o fim da partida")
     var guard := 0
-    while not s.is_over() and guard < 100:
+    while not fallen.is_expired() and not s.is_over() and guard < 100:
         guard += 1
         if s.active.is_alive():
             s.end_turn()
-    check(s.is_over(), "a partida termina quando o morrendo expira")
-    check_eq(s.winner, 0, "time 0 venceu")
-    check_eq(seen, [0], "sinal emitido uma vez")
+
+    check(fallen.is_expired(), "a contagem continua até a caveira")
     check_eq(dying_turns_seen.size(), initial_dying_turns[0],
-            "a contagem só avança nos turnos que seriam do caído")
-    check_eq(dying_turns_seen.back(), 0, "o estado termina quando o contador chega a zero")
-    check_eq(s.attack(0, 1).error, "match_over", "nada apos o fim")
-    check_eq(s.move(0, Vector2i(0, 0)).error, "match_over", "nada apos o fim")
+            "a contagem avança somente nos turnos reservados para o caído")
+    check_eq(dying_turns_seen.back(), 0, "a contagem chega a zero no turno do caído")
+    check(not s.is_over(), "a caveira não encerra a partida enquanto há inimigo vivo")
 
 
 func test_duracao_morrendo_considera_fe_bravura_e_dano() -> void:

@@ -4,6 +4,7 @@ extends RefCounted
 
 
 const TILE_H := 0.5
+const TILE_SIZE := 1.15
 const ROCK_EXTRA := 1.0
 const SLOPE_DROP := 0.45
 
@@ -17,7 +18,8 @@ static func column_top(map: BattleMap, p: Vector2i) -> float:
 
 
 static func center_xz(map: BattleMap, p: Vector2i) -> Vector2:
-    return Vector2(p.x + 0.5 - map.width / 2.0, p.y + 0.5 - map.depth / 2.0)
+    return Vector2((p.x + 0.5 - map.width / 2.0) * TILE_SIZE,
+            (p.y + 0.5 - map.depth / 2.0) * TILE_SIZE)
 
 
 
@@ -33,7 +35,7 @@ static func tile_pos(map: BattleMap, p: Vector2i) -> Vector3:
 static func slope_mesh(map: BattleMap, p: Vector2i) -> ArrayMesh:
     var top := top_y(map, p)
     var d := map.slope_dir(p)
-    var half := 0.5
+    var half := TILE_SIZE * 0.5
 
     var corners := [Vector2(-1, -1), Vector2(1, -1), Vector2(1, 1), Vector2(-1, 1)]
     var h := []

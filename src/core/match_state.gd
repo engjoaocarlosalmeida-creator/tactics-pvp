@@ -476,7 +476,7 @@ func _check_victory() -> bool:
         return true
     var alive_teams := {}
     for u in units:
-        if u.is_alive() or u.is_dying():
+        if u.is_alive():
             alive_teams[u.team] = true
     if alive_teams.size() <= 1:
         _finish(alive_teams.keys()[0] if alive_teams.size() == 1 else DRAW)

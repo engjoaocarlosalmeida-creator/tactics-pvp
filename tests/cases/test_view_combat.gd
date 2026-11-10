@@ -82,6 +82,11 @@ func test_modelos_3d_recebem_contorno_da_equipe() -> void:
                 check_eq(outline.get_shader_parameter("outline_color"), expected_color,
                         "o contorno usa a cor do time %d" % unit.team)
         check(found_outline, "modelo do time %d tem contorno" % unit.team)
+        var extra_floor_meshes := 0
+        for child in v.unit_nodes[unit.id].get_children():
+            if child is MeshInstance3D and child.name != "Ring":
+                extra_floor_meshes += 1
+        check_eq(extra_floor_meshes, 0, "unidade nao tem disco colorido no tile")
     _cleanup()
 
 
@@ -128,7 +133,93 @@ func test_expiracao_substitui_modelo_por_caveira_no_local() -> void:
     check(node.get_node_or_null("Body") == null, "o corpo é removido")
     check(node.get_node_or_null("Skull") != null, "a caveira substitui o corpo")
     check_eq(node.position, position, "a caveira permanece no local da queda")
+    var skull := node.get_node("Skull") as Node3D
+    check_eq(skull.scale, Vector3.ONE * 0.5,
+            "a caveira tem um quarto do tamanho anterior")
+    check_eq(skull.position.y, 0.0,
+            "a caveira fica apoiada no tile")
+    var extra_floor_meshes := 0
+    for child in node.get_children():
+        if child is MeshInstance3D and child.name != "Ring":
+            extra_floor_meshes += 1
+    check_eq(extra_floor_meshes, 0, "a caveira nao tem disco colorido no tile")
+    var outline_found := false
+    for mesh_node in skull.find_children("*", "MeshInstance3D", true, false):
+        var mesh_instance := mesh_node as MeshInstance3D
+        if mesh_instance.mesh == null:
+            continue
+        for surface in mesh_instance.mesh.get_surface_count():
+            var material := mesh_instance.get_active_material(surface) as StandardMaterial3D
+            if material == null:
+                continue
+            var outline := material.next_pass as ShaderMaterial
+            if outline == null:
+                continue
+            outline_found = true
+            check_eq(outline.get_shader_parameter("outline_color"),
+                    CHARACTER_MODEL.team_color(fallen.team),
+                    "a caveira mantém o contorno colorido da equipe")
+    check(outline_found, "a caveira tem contorno que identifica a equipe")
     check(not node.get_node("Ring").visible, "a caveira não aparece como unidade ativa")
+    _cleanup()
+
+
+func test_barra_de_hp_permanece_oculta_enquanto_unidade_morre() -> void:
+    if not needs_display():
+        return
+    var v := _make()
+    v.mode = GameView.Mode.LOCAL
+    var state := _duel([[0, 0, 0, 0, 0, 0]], Vector2i(0, 0), Vector2i(5, 0))
+    v.setup_match(state)
+    var fallen: Unit = state.units[1]
+    fallen.hp = 0
+    fallen.dying_turns = 3
+
+    v._update_unit_visual(fallen)
+
+    check(not v.unit_nodes[fallen.id].get_node("Over/HpFill").visible,
+            "a barra vazia continua oculta durante o estado morrendo")
+    _cleanup()
+
+
+func test_impacto_exibe_dano_e_inicia_queda_antes_do_fim_do_golpe() -> void:
+    if not needs_display():
+        return
+    var v := _make()
+    v.mode = GameView.Mode.LOCAL
+    var state := _duel([[0, 0, 0, 0, 0, 0]], Vector2i(2, 0), Vector2i(3, 0))
+    v.setup_match(state)
+    v.animate = true
+    var victim: Unit = state.units[1]
+    victim.hp = 0
+    victim.dying_turns = 4
+    var attacker_body: Node3D = v.unit_nodes[0].get_node("Body")
+    var victim_body: Node3D = v.unit_nodes[1].get_node("Body")
+    var attacker_player := CHARACTER_MODEL.animation_player(attacker_body)
+    var victim_player := CHARACTER_MODEL.animation_player(victim_body)
+
+    v._present_attack_resolved(state.units[0], state.units[0].facing)
+    check_eq(str(attacker_player.current_animation), "espadada_dentroparafora",
+            "o golpe continua em andamento")
+    v._present_attack_impact(victim, 10, 10)
+
+    check(str(victim_player.current_animation).begins_with("death_"),
+            "a queda começa no impacto, antes de terminar o golpe")
+    check(v._death_animation_started.has(victim.id), "a animação de morte só inicia uma vez")
+    check_eq(v.unit_nodes[victim.id].get_node("Over/Turns").text, "4",
+            "o indicador mostra apenas a contagem")
+    check_eq(v.unit_nodes[victim.id].get_node("Over/Turns").offset, Vector2.ZERO,
+            "a contagem fica centralizada sobre o tile")
+    v._update_overheads()
+    check_eq(v.unit_nodes[victim.id].get_node("Over").global_position,
+            v.unit_nodes[victim.id].global_position + Vector3(0, 0.35, 0),
+            "a contagem fica junto ao personagem caído no centro do tile")
+    var damage_visible := false
+    for child in v.get_children():
+        if child is Label3D and (child as Label3D).text == "-10":
+            damage_visible = true
+    check(damage_visible, "o número de dano aparece no impacto")
+    check_eq(v.busy, 2, "golpe e queda rodam juntos")
     _cleanup()
 
 
@@ -204,6 +295,7 @@ func test_xp_aguarda_ataque_e_aviso_de_dano() -> void:
     v.setup_match(st)
     v.animate = true
     var attacker: Unit = st.units[0]
+    attacker.character_id = v.roster.characters[0].id
 
     check(v._command({"t": "attack", "unit": attacker.id, "target": st.units[1].id}),
             "o ataque e aplicado")
@@ -211,18 +303,19 @@ func test_xp_aguarda_ataque_e_aviso_de_dano() -> void:
     check_eq(v._visual_queue.size(), 2, "dano e XP aguardam o golpe")
     check(v.last_rewards.is_empty(), "o XP ainda nao foi processado durante o golpe")
 
-    var action := str(v._attack_animations[attacker.id])
-    v._finish_attack_animation(attacker.id, action)
-    check_eq(v.busy, 1, "o aviso de dano e mostrado antes do XP")
-    check(v.last_rewards.is_empty(), "o XP aguarda a conclusao do aviso de dano")
+    v._present_attack_impact(st.units[1], 8, st.units[1].max_hp)
     var labels: Array[String] = []
     for child in v.get_children():
         if child is Label3D:
             labels.append((child as Label3D).text)
     check(labels.any(func(text: String): return text.begins_with("-")),
-            "o texto de dano aparece apos o golpe")
-    check(not labels.any(func(text: String): return text.contains("XP")),
-            "o texto de XP nao se sobrepoe ao aviso de dano")
+            "o texto de dano aparece no impacto")
+    check(v.last_rewards.is_empty(), "o XP continua aguardando o fim do golpe")
+
+    var action := str(v._attack_animations[attacker.id])
+    v._finish_attack_animation(attacker.id, action)
+    check_eq(v.busy, 1, "o aviso de XP ocupa a fila depois do golpe")
+    check(not v.last_rewards.is_empty(), "o XP só e processado depois do golpe")
     _cleanup()
 
 
