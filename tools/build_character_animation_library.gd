@@ -38,16 +38,16 @@ func _build() -> void:
         animation.resource_name = action
         if action in ["Idle", "walk"]:
             animation.loop_mode = Animation.LOOP_LINEAR
-        var error := library.add_animation(action, animation)
+        var add_animation_error := library.add_animation(action, animation)
         character.free()
-        if error != OK:
+        if add_animation_error != OK:
             push_error("Nao foi possivel adicionar a animacao " + action)
             quit(1)
             return
 
-    var error := ResourceSaver.save(library, OUTPUT_PATH)
-    if error != OK:
-        push_error("Nao foi possivel salvar a biblioteca de animacoes: %s" % error)
+    var save_error := ResourceSaver.save(library, OUTPUT_PATH)
+    if save_error != OK:
+        push_error("Nao foi possivel salvar a biblioteca de animacoes: %s" % save_error)
         quit(1)
         return
     print("Animacoes salvas: ", SOURCES.keys())
