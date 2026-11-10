@@ -13,6 +13,7 @@
       "range": 0
     },
     "attack_stat": "forca",
+    "ai_initiative": 0.45,
     "desc": "Defensor resistente. Base para Cavaleiro e Arqueiro."
   },
   "aprendiz": {
@@ -29,6 +30,7 @@
       "range": 0
     },
     "attack_stat": "inteligencia",
+    "ai_initiative": 0.35,
     "desc": "Estudioso de pouca vida e muita curiosidade. Base para Sacerdote e Mago."
   },
   "lutador": {
@@ -45,6 +47,7 @@
       "range": 0
     },
     "attack_stat": "forca",
+    "ai_initiative": 0.3,
     "desc": "Combatente ágil e direto. Base para o Ladrão."
   },
   "cavaleiro": {
@@ -62,6 +65,7 @@
       "range": 0
     },
     "attack_stat": "forca",
+    "ai_initiative": 0.8,
     "desc": "Blindado e lento, aguenta o front da batalha."
   },
   "arqueiro": {
@@ -79,6 +83,7 @@
       "range": 2
     },
     "attack_stat": "forca",
+    "ai_initiative": -0.55,
     "desc": "Ataca de longe com precisão (alcance 3)."
   },
   "sacerdote": {
@@ -96,6 +101,7 @@
       "range": 0
     },
     "attack_stat": "sabedoria",
+    "ai_initiative": 0.1,
     "desc": "Apoio de fé forte; o ataque básico usa Sabedoria."
   },
   "mago": {
@@ -113,6 +119,7 @@
       "range": 1
     },
     "attack_stat": "inteligencia",
+    "ai_initiative": -0.65,
     "desc": "Estudioso das artes arcanas; ataca a 2 casas usando Inteligência."
   },
   "ladrao": {
@@ -130,6 +137,7 @@
       "range": 0
     },
     "attack_stat": "forca",
+    "ai_initiative": 0.15,
     "desc": "Muito veloz, anda mais longe e pula mais alto."
   }
 }

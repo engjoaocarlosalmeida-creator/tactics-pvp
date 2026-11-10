@@ -23,6 +23,7 @@ var attrs: Dictionary = {}
 var bravura: int = 50
 var fe: int = 50
 var job_id: String = ""
+var ai_initiative: float = 0.0
 var look: String = "m"
 var attack_stat: String = "forca"
 var character_id: int = -1
@@ -41,10 +42,19 @@ var job_xp_earned: int = 0
 var facing: Vector2i = Vector2i(0, 1)   # lado para onde esta virado (uma das 4 direcoes)
 var down: bool = false                  # caido: precisa gastar a acao de movimento para levantar
 var reacted: bool = false               # ja teve uma reacao desde o seu ultimo turno
+var dying_turns: int = 0
 
 
 func is_alive() -> bool:
     return hp > 0
+
+
+func is_dying() -> bool:
+    return hp <= 0 and dying_turns > 0
+
+
+func is_expired() -> bool:
+    return hp <= 0 and dying_turns <= 0
 
 
 
@@ -90,6 +100,7 @@ static func from_character(unit_id: int, unit_team: int, c: Character, rules: Ru
     u.attrs = c.attrs.duplicate()
     u.bravura = c.bravura
     u.fe = c.fe
+    u.ai_initiative = float(catalog.jobs[c.job_id].get("ai_initiative", 0.0))
     var start := rules.get_int("attributes", "start")
     var m: Dictionary = catalog.mods(c.job_id)
     var d_agi := int(c.attrs["agilidade"]) - start

@@ -11,6 +11,8 @@ signal turn_started(unit: Unit)
 signal unit_moved(unit: Unit, path: Array)
 signal unit_hurt(unit: Unit, amount: int, reason: String)
 signal unit_died(unit: Unit)
+signal unit_dying_turn(unit: Unit, turns_left: int)
+signal unit_expired(unit: Unit)
 signal match_over(winner: int)
 
 
@@ -86,6 +88,13 @@ func start() -> void :
     _begin_turn()
 
 
+func _has_dying_units() -> bool:
+    for u in units:
+        if u.is_dying():
+            return true
+    return false
+
+
 func is_over() -> bool:
     return winner != ONGOING
 
@@ -105,8 +114,16 @@ func occupied() -> Dictionary:
     return d
 
 
+func reserved_tiles() -> Dictionary:
+    var d := {}
+    for u in units:
+        if u.is_dying() or u.is_expired():
+            d[u.pos] = u
+    return d
+
+
 func reachable_for(u: Unit) -> Dictionary:
-    return Pathing.reachable(map, rules, u, occupied())
+    return Pathing.reachable(map, rules, u, occupied(), reserved_tiles())
 func move_options(u: Unit) -> Array[Vector2i]:
     var out: Array[Vector2i] = []
     if u.move_budget() <= 0 or u.down:
@@ -242,7 +259,7 @@ func attack(unit_id: int, target_id: int) -> Dictionary:
     var dmg := _resolve_hit(active, t, base, "normal")   # esquiva, parry e bloqueio rolam em segundo plano
     attack_resolved.emit(active, t, t.pos, dmg)
     if dmg > 0:
-        _damage(t, dmg, "attack")
+        _damage(t, dmg, "attack", active)
         if t.team != active.team:   # so golpes que acertam inimigos rendem XP
             _grant_xp(active, t)
     _after_action()
@@ -343,7 +360,8 @@ func switch_active(from_id: int, to_id: int) -> Dictionary:
 func state_hash() -> int:
     var arr := []
     for u in units:
-        arr.append([u.id, u.pos.x, u.pos.y, u.hp, u.ct, u.moved, u.acted, u.move_left, u.facing.x, u.facing.y, u.down, u.reacted])
+        arr.append([u.id, u.pos.x, u.pos.y, u.hp, u.ct, u.moved, u.acted, u.move_left,
+                u.facing.x, u.facing.y, u.down, u.reacted, u.dying_turns])
     arr.append(active.id if active != null else -1)
     arr.append(turn_serial)
     arr.append(winner)
@@ -365,7 +383,9 @@ func _end_turn_now() -> void:
     if is_over() or active == null:
         return
     awaiting_facing = false
-    if not active.moved and not active.acted:
+    if _has_dying_units():
+        idle_streak = 0
+    elif active.is_alive() and not active.moved and not active.acted:
         idle_streak += 1
     turns.end_turn(active, active.moved, active.acted)
     _begin_turn()
@@ -384,11 +404,30 @@ func _reset_turn_flags(u: Unit) -> void:
     u.move_left = u.move
 
 
-func _damage(u: Unit, amount: int, reason: String) -> void :
+func _damage(u: Unit, amount: int, reason: String, attacker: Unit = null) -> void :
+    var previous_hp := u.hp
     u.hp = maxi(0, u.hp - amount)
     unit_hurt.emit(u, amount, reason)
-    if u.hp == 0:
+    if previous_hp > 0 and u.hp == 0:
+        u.dying_turns = _dying_duration(u, attacker, amount, reason, previous_hp)
+        idle_streak = 0
         unit_died.emit(u)
+
+
+func _dying_duration(victim: Unit, attacker: Unit, amount: int, reason: String,
+        previous_hp: int) -> int:
+    var duration := combat_rng.randi_range(2, 7)
+    var victim_resolve := clampi(victim.fe, 0, 100) + clampi(victim.bravura, 0, 100)
+    var attacker_resolve := 100
+    if attacker != null:
+        attacker_resolve = clampi(attacker.fe, 0, 100) + clampi(attacker.bravura, 0, 100)
+    duration += clampi(roundi(float(victim_resolve - attacker_resolve) / 50.0), -2, 2)
+
+    if reason == "attack" and amount * 100 >= victim.max_hp * 60:
+        duration -= 1
+    if amount >= previous_hp + ceili(float(victim.max_hp) * 0.6):
+        duration -= 1
+    return clampi(duration, 2, 7)
 func _after_action() -> void:
     if _check_victory():
         return
@@ -412,11 +451,21 @@ func _begin_turn() -> void :
         if active == null:
             _finish(DRAW)
             return
-        _reset_turn_flags(active)
         turn_serial += 1
+        if active.is_dying():
+            active.dying_turns -= 1
+            unit_dying_turn.emit(active, active.dying_turns)
+            if active.dying_turns == 0:
+                unit_expired.emit(active)
+            turns.end_turn(active, false, false)
+            continue
+        _reset_turn_flags(active)
         turn_started.emit(active)
         if rules.get_bool("turn", "auto_end") and not has_actions(active):
-            idle_streak += 1
+            if _has_dying_units():
+                idle_streak = 0
+            else:
+                idle_streak += 1
             turns.end_turn(active, false, false)
             continue
         return
@@ -427,7 +476,7 @@ func _check_victory() -> bool:
         return true
     var alive_teams := {}
     for u in units:
-        if u.is_alive():
+        if u.is_alive() or u.is_dying():
             alive_teams[u.team] = true
     if alive_teams.size() <= 1:
         _finish(alive_teams.keys()[0] if alive_teams.size() == 1 else DRAW)
@@ -530,7 +579,7 @@ func _on_defended(kind: String, attacker: Unit, defender: Unit, base: int, mode:
                 reaction_event.emit(defender, "counter", "Contra-ataque")
                 var dmg := attack_damage(defender, attacker)
                 attack_resolved.emit(defender, attacker, attacker.pos, dmg)
-                _damage(attacker, dmg, "attack")
+                _damage(attacker, dmg, "attack", defender)
                 if attacker.team != defender.team:
                     _grant_xp(defender, attacker)
         "block":   # dano muito maior que a forca: absorve tudo, mas o defensor cai
@@ -560,7 +609,7 @@ func _opportunity_attacks(mover: Unit, origin: Vector2i, dest: Vector2i) -> void
                 var dmg := _resolve_hit(e, mover, attack_damage(e, mover), "reaction")
                 attack_resolved.emit(e, mover, mover.pos, dmg)
                 if dmg > 0:
-                    _damage(mover, dmg, "attack")
+                    _damage(mover, dmg, "attack", e)
                     _grant_xp(e, mover)
 
 

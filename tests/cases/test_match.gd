@@ -131,16 +131,94 @@ func test_altura_demais_impede_ataque() -> void:
 
 
 func test_vitoria_e_fim_de_partida() -> void:
-    var s := _duel([[0, 0]], Vector2i(0, 0), Vector2i(1, 0))
+    var s := _duel([[0, 0, 0], [0, 0, 0], [0, 0, 0]],
+            Vector2i(1, 1), Vector2i(2, 1))
     s.units[1].hp = 1
     var seen := []
+    var dying_turns_seen: Array[int] = []
+    var initial_dying_turns := [-1]
     s.match_over.connect(func(w): seen.append(w))
+    s.unit_died.connect(func(unit):
+        if unit.id == 1:
+            initial_dying_turns[0] = unit.dying_turns)
+    s.unit_dying_turn.connect(func(unit, turns_left):
+        if unit.id == 1:
+            dying_turns_seen.append(turns_left))
     check(s.attack(0, 1).ok, "golpe final")
-    check(s.is_over(), "acabou")
+    check(not s.is_over(), "o personagem fica morrendo antes da vitoria")
+    check(s.units[1].is_dying(), "HP zero inicia o estado morrendo")
+    check(initial_dying_turns[0] >= 2 and initial_dying_turns[0] <= 7,
+            "a duracao fica entre 2 e 7 turnos")
+    check_eq(s.units[1].hp, 0, "HP permanece em zero")
+
+    var guard := 0
+    while not s.is_over() and guard < 100:
+        guard += 1
+        if s.active.is_alive():
+            s.end_turn()
+    check(s.is_over(), "a partida termina quando o morrendo expira")
     check_eq(s.winner, 0, "time 0 venceu")
     check_eq(seen, [0], "sinal emitido uma vez")
+    check_eq(dying_turns_seen.size(), initial_dying_turns[0],
+            "a contagem só avança nos turnos que seriam do caído")
+    check_eq(dying_turns_seen.back(), 0, "o estado termina quando o contador chega a zero")
     check_eq(s.attack(0, 1).error, "match_over", "nada apos o fim")
     check_eq(s.move(0, Vector2i(0, 0)).error, "match_over", "nada apos o fim")
+
+
+func test_duracao_morrendo_considera_fe_bravura_e_dano() -> void:
+    var victim_high := TestUtil.unit(0, 0, Vector2i(0, 0), r)
+    var victim_low := TestUtil.unit(1, 0, Vector2i(0, 0), r)
+    var attacker_high := TestUtil.unit(2, 1, Vector2i(1, 0), r)
+    var attacker_low := TestUtil.unit(3, 1, Vector2i(1, 0), r)
+    victim_high.fe = 100
+    victim_high.bravura = 100
+    victim_low.fe = 0
+    victim_low.bravura = 0
+    victim_high.max_hp = 100
+    victim_low.max_hp = 100
+    attacker_high.fe = 100
+    attacker_high.bravura = 100
+    attacker_low.fe = 0
+    attacker_low.bravura = 0
+    var first := _duel()
+    var second := _duel()
+    first.combat_rng.seed = 123
+    second.combat_rng.seed = 123
+    var resilient_duration := first._dying_duration(victim_high, attacker_low, 10, "attack", 100)
+    var fragile_duration := second._dying_duration(victim_low, attacker_high, 10, "attack", 100)
+    check(resilient_duration > fragile_duration,
+            "fé e bravura altas do caído aumentam a chance de resistir")
+
+    first.combat_rng.seed = 456
+    second.combat_rng.seed = 456
+    var normal_hit := first._dying_duration(victim_high, attacker_low, 59, "attack", 60)
+    var heavy_hit := second._dying_duration(victim_high, attacker_low, 60, "attack", 60)
+    check(normal_hit >= heavy_hit, "um golpe de 60% da vida aplica penalidade")
+
+    first.combat_rng.seed = 789
+    second.combat_rng.seed = 789
+    var heavy_overkill := first._dying_duration(victim_high, attacker_low, 60, "attack", 20)
+    var extreme_overkill := second._dying_duration(victim_high, attacker_low, 80, "attack", 20)
+    check(heavy_overkill > extreme_overkill, "dano muito acima da vida restante recebe penalidade extra")
+
+
+func test_casa_de_morrendo_pode_ser_atravessada_mas_nao_ocupada() -> void:
+    var map := TestUtil.map_from([[0, 0, 0]])
+    var mover := TestUtil.unit(0, 0, Vector2i(0, 0), r)
+    var corpse := TestUtil.unit(1, 1, Vector2i(1, 0), r)
+    corpse.hp = 0
+    corpse.dying_turns = 3
+    var state := MatchState.from_parts(r, map, [mover, corpse])
+    var reach := state.reachable_for(mover)
+    check(reach.has(Vector2i(1, 0)), "o caminho atravessa a casa reservada")
+    check(not reach[Vector2i(1, 0)].can_stop, "não pode terminar na casa reservada")
+    check(reach.has(Vector2i(2, 0)) and reach[Vector2i(2, 0)].can_stop,
+            "pode atravessar e ocupar a casa seguinte")
+    check(not state.occupied().has(corpse.pos), "morrendo não bloqueia a passagem")
+    check(state.reserved_tiles().has(corpse.pos), "morrendo ainda reserva o local")
+    corpse.dying_turns = 0
+    check(state.reserved_tiles().has(corpse.pos), "a caveira continua reservando o local")
 
 
 func test_impasse_vira_empate_sem_travar() -> void:

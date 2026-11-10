@@ -2,6 +2,8 @@ extends RefCounted
 
 const MODEL_PATH := "res://assets/models/animations/Arhcer_MASC_Idle.fbx"
 const ANIMATIONS_PATH := "res://assets/models/character_animations.tres"
+const SKULL_PATH := "res://assets/models/skull.glb"
+const CHARACTER_TEXTURE: Texture2D = preload("res://assets/models/Ranger_ranger_texture.png")
 const MODEL_SCALE := 85.0
 const BLUE_TEAM_COLOR := Color(0.25, 0.55, 1.0)
 const RED_TEAM_COLOR := Color(1.0, 0.35, 0.3)
@@ -48,6 +50,21 @@ static func create_model(outline_color: Color) -> Node3D:
     _apply_outline(model, outline_color)
     player.play("Idle")
     return model
+
+
+static func create_skull() -> Node3D:
+    var resource := load(SKULL_PATH)
+    if not resource is PackedScene:
+        push_error("O modelo da caveira nao foi importado como uma cena: " + SKULL_PATH)
+        return null
+    var skull := resource.instantiate() as Node3D
+    if skull == null:
+        push_error("A cena da caveira nao possui uma raiz Node3D.")
+        return null
+    skull.name = "Skull"
+    skull.scale = Vector3.ONE * 2.0
+    skull.position.y = 0.5
+    return skull
 
 
 static func animation_player(model: Node3D) -> AnimationPlayer:
@@ -164,5 +181,7 @@ static func _apply_outline(model: Node3D, outline_color: Color) -> void:
             if original_material == null:
                 continue
             var material := original_material.duplicate() as Material
+            if material is StandardMaterial3D:
+                material.albedo_texture = CHARACTER_TEXTURE
             material.next_pass = outline_material
             mesh_instance.set_surface_override_material(surface, material)

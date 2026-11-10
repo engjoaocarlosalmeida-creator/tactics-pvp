@@ -44,7 +44,7 @@ func next_unit(units: Array) -> Unit:
 func _next(units: Array, r: RandomNumberGenerator) -> Unit:
     var alive: Array = []
     for u in units:
-        if u.is_alive():
+        if u.is_alive() or u.is_dying():
             alive.append(u)
     if alive.is_empty():
         return null
@@ -90,13 +90,14 @@ func end_turn(unit: Unit, moved := true, acted := true) -> void :
 func preview(units: Array, count: int) -> Array[int]:
     var sim: Array = []
     for u in units:
-        if u.is_alive():
+        if u.is_alive() or u.is_dying():
             var c := Unit.new()
             c.id = u.id
             c.team = u.team
             c.ct = u.ct
             c.speed = u.speed
-            c.hp = 1
+            c.hp = u.hp
+            c.dying_turns = u.dying_turns
             sim.append(c)
     var out: Array[int] = []
     if sim.is_empty():
@@ -107,5 +108,9 @@ func preview(units: Array, count: int) -> Array[int]:
     for i in count:
         var n := _next(sim, sim_rng)
         out.append(n.id)
-        n.ct -= cost_move + cost_attack
+        if n.is_dying():
+            n.dying_turns -= 1
+            n.ct -= cost_wait
+        else:
+            n.ct -= cost_move + cost_attack
     return out

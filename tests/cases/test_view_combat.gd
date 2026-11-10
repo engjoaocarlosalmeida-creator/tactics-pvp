@@ -48,8 +48,9 @@ func test_times_humanos_escolhem_o_lado_no_fim_do_turno() -> void:
     check(v.click_tile(u.pos + Vector2i(0, 1)), "clicar numa casa vizinha escolhe o lado")
     check_eq(u.facing, Vector2i(0, 1), "virado para baixo")
     check_eq(v.m.active.id, 1, "turno passou")
-    var mark: MeshInstance3D = v.unit_nodes[u.id].get_node("FacingMark")
-    check((mark.basis.y - Vector3(0, 0, 1)).length() < 0.01, "o cone da base aponta para onde esta virado")
+    check(not v.unit_nodes[u.id].has_node("FacingMark"), "a seta indicadora nao e mais exibida")
+    var body: Node3D = v.unit_nodes[u.id].get_node("Body")
+    check(is_zero_approx(body.rotation.y), "o modelo mantem a orientacao escolhida")
     _cleanup()
 
 
@@ -72,6 +73,8 @@ func test_modelos_3d_recebem_contorno_da_equipe() -> void:
                 var material := mesh_instance.get_active_material(surface) as StandardMaterial3D
                 if material == null:
                     continue
+                check_eq(material.albedo_texture, CHARACTER_MODEL.CHARACTER_TEXTURE,
+                        "a malha usa a textura do Ranger")
                 var outline := material.next_pass as ShaderMaterial
                 if outline == null:
                     continue
@@ -99,10 +102,154 @@ func test_animacao_de_ataque_tambem_ocorre_em_casa_vazia() -> void:
     check(animation_player.has_animation("jump_down"), "a biblioteca contem jump_down")
     check(animation_player.has_animation("espadada_dentroparafora"), "a biblioteca contem o primeiro golpe")
     check(animation_player.has_animation("espadada_foraparadentro"), "a biblioteca contem o segundo golpe")
+    check(animation_player.has_animation("death_forward"), "a biblioteca contem a queda para frente")
+    check(animation_player.has_animation("death_back"), "a biblioteca contem a queda para trás")
     v._on_attack_resolved(attacker, null, Vector2i(1, 0), 0)
     check_eq(str(animation_player.current_animation), "espadada_dentroparafora",
             "atacar uma casa vazia ainda executa o golpe")
     _cleanup()
+
+
+func test_expiracao_substitui_modelo_por_caveira_no_local() -> void:
+    if not needs_display():
+        return
+    var v := _make()
+    v.mode = GameView.Mode.LOCAL
+    var state := _duel([[0, 0, 0, 0, 0, 0]], Vector2i(0, 0), Vector2i(5, 0))
+    v.setup_match(state)
+    var fallen: Unit = state.units[1]
+    fallen.hp = 0
+    fallen.dying_turns = 0
+    var position: Vector3 = v.unit_nodes[fallen.id].position
+
+    v._present_unit_expired(fallen)
+
+    var node: Node3D = v.unit_nodes[fallen.id]
+    check(node.get_node_or_null("Body") == null, "o corpo é removido")
+    check(node.get_node_or_null("Skull") != null, "a caveira substitui o corpo")
+    check_eq(node.position, position, "a caveira permanece no local da queda")
+    check(not node.get_node("Ring").visible, "a caveira não aparece como unidade ativa")
+    _cleanup()
+
+
+func test_texto_de_dano_muda_de_tamanho_com_a_quantidade() -> void:
+    if not needs_display():
+        return
+    var v := _make()
+    v._float_text(Vector3.ZERO, "-3", Color.RED, 34, 0.6)
+    v._float_text(Vector3.ZERO, "-30", Color.RED, 52, 0.6)
+    var sizes: Array[int] = []
+    for child in v.get_children():
+        if child is Label3D:
+            sizes.append((child as Label3D).font_size)
+    check(sizes.has(34) and sizes.has(52), "dano maior recebe fonte maior")
+    _cleanup()
+
+
+func test_interromper_ataque_para_mover_libera_fila_cpu() -> void:
+    var v := _make()
+    v.mode = GameView.Mode.LOCAL
+    v.setup_match(_duel([[0, 0, 0, 0, 0, 0]], Vector2i(0, 0), Vector2i(5, 0)))
+    v.animate = true
+    var attacker: Unit = v.m.units[0]
+    var body: Node3D = v.unit_nodes[attacker.id].get_node("Body")
+    var animation_player := CHARACTER_MODEL.animation_player(body)
+    var attack_finished := [0]
+    animation_player.animation_finished.connect(func(animation_name: StringName):
+        if animation_name == "espadada_dentroparafora":
+            attack_finished[0] += 1)
+
+    v._on_attack_resolved(attacker, null, Vector2i(1, 0), 0)
+    check_eq(v.busy, 1, "a animacao de ataque bloqueia a proxima acao enquanto executa")
+    v._play_unit_animation(attacker.id, "walk", 0.16)
+    animation_player.advance(3.0)
+
+    check_eq(v.busy, 0,
+            "interromper o ataque para mover libera o bloqueio que impedia os turnos")
+    check_eq(str(animation_player.current_animation), "walk",
+            "a locomocao substitui a animacao de ataque")
+    check_eq(attack_finished[0], 0,
+            "o Godot nao emite animation_finished para um golpe interrompido pela locomocao")
+    v._on_unit_animation_finished("espadada_dentroparafora", attacker.id)
+    check_eq(v.busy, 0, "o sinal atrasado nao libera o contador duas vezes")
+    _cleanup()
+
+
+func test_fila_visual_espera_a_etapa_atual_terminar() -> void:
+    var v := _make()
+    var events: Array[String] = []
+    v._collecting_visual_events = true
+    v._queue_visual_action(func():
+        events.append("movimento")
+        v.busy += 1)
+    v._queue_visual_action(func(): events.append("xp"))
+    v._collecting_visual_events = false
+    v._drain_visual_queue()
+
+    check_eq(events, ["movimento"], "o XP aguarda a etapa visual anterior")
+    check_eq(v.busy, 1, "a etapa ativa mantem a fila bloqueada")
+    v._anim_done()
+    check_eq(events, ["movimento", "xp"], "a fila avanca depois da conclusao")
+    check_eq(v.busy, 0, "a conclusao libera o bloqueio")
+    _cleanup()
+
+
+func test_xp_aguarda_ataque_e_aviso_de_dano() -> void:
+    if not needs_display():
+        return
+    var v := _make()
+    MatchState.reactions_enabled = false
+    v.mode = GameView.Mode.LOCAL
+    var st := _duel([[0, 0, 0, 0, 0, 0]], Vector2i(2, 0), Vector2i(3, 0))
+    v.setup_match(st)
+    v.animate = true
+    var attacker: Unit = st.units[0]
+
+    check(v._command({"t": "attack", "unit": attacker.id, "target": st.units[1].id}),
+            "o ataque e aplicado")
+    check(v._attack_animations.has(attacker.id), "o golpe comeca primeiro")
+    check_eq(v._visual_queue.size(), 2, "dano e XP aguardam o golpe")
+    check(v.last_rewards.is_empty(), "o XP ainda nao foi processado durante o golpe")
+
+    var action := str(v._attack_animations[attacker.id])
+    v._finish_attack_animation(attacker.id, action)
+    check_eq(v.busy, 1, "o aviso de dano e mostrado antes do XP")
+    check(v.last_rewards.is_empty(), "o XP aguarda a conclusao do aviso de dano")
+    var labels: Array[String] = []
+    for child in v.get_children():
+        if child is Label3D:
+            labels.append((child as Label3D).text)
+    check(labels.any(func(text: String): return text.begins_with("-")),
+            "o texto de dano aparece apos o golpe")
+    check(not labels.any(func(text: String): return text.contains("XP")),
+            "o texto de XP nao se sobrepoe ao aviso de dano")
+    _cleanup()
+
+
+func test_animacoes_de_pulo_nao_deslocam_o_quadril_no_plano() -> void:
+    var library := load(CHARACTER_MODEL.ANIMATIONS_PATH) as AnimationLibrary
+    check(library != null, "biblioteca de animacoes carregada")
+    if library == null:
+        return
+
+    for action in ["jump_up", "jump_down"]:
+        var animation := library.get_animation(action)
+        var root_track := -1
+        for track in animation.get_track_count():
+            if animation.track_get_type(track) == Animation.TYPE_POSITION_3D \
+                    and str(animation.track_get_path(track)).ends_with(":mixamorig_Hips"):
+                root_track = track
+                break
+        check(root_track >= 0, "%s contem a trilha do quadril" % action)
+        if root_track < 0:
+            continue
+
+        var initial_position: Vector3 = animation.track_get_key_value(root_track, 0)
+        for key in animation.track_get_key_count(root_track):
+            var position: Vector3 = animation.track_get_key_value(root_track, key)
+            check(is_equal_approx(position.x, initial_position.x)
+                    and is_equal_approx(position.z, initial_position.z),
+                    "%s nao duplica deslocamento horizontal do movimento" % action)
 
 
 func test_esc_mantem_o_lado_e_clique_longe_nao_faz_nada() -> void:

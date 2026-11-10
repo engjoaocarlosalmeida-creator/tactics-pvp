@@ -104,6 +104,28 @@ func test_morto_nao_age() -> void:
         ts.end_turn(u, true, true)
 
 
+func test_morrendo_continua_na_ordem_de_turnos() -> void:
+    var dying := _mk(0, 10, 100)
+    dying.hp = 0
+    dying.dying_turns = 3
+    var alive := _mk(1, 5, 0)
+    var ts := TurnSystem.new(r, 1)
+    check(ts.next_unit([dying, alive]) != null, "uma unidade morrendo ainda avança o relógio")
+    check(dying.is_dying(), "unidade fica elegível para o próprio turno")
+
+
+func test_previsao_considera_turno_do_morrendo() -> void:
+    var dying := _mk(0, 10, 100)
+    dying.hp = 0
+    dying.dying_turns = 1
+    var alive := _mk(1, 5, 100)
+    var ts := TurnSystem.new(r, 1)
+
+    check_eq(ts.preview([dying, alive], 2), [0, 1],
+            "o turno reservado para o morrendo aparece na previsão")
+    check_eq(dying.dying_turns, 1, "a previsão não altera a contagem real")
+
+
 func test_velocidade_zero_nao_trava() -> void:
     check_eq(TurnSystem.new(r, 1).next_unit([_mk(0, 0)]).id, 0, "velocidade 0 vira 1")
 

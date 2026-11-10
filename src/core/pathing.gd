@@ -18,7 +18,7 @@ static func fall_damage(rules: Rules, unit: Unit, drop: int) -> int:
 
 
 static func resolve_step(map: BattleMap, rules: Rules, unit: Unit, from: Vector2i, 
-        dir: Vector2i, occupied: Dictionary) -> Dictionary:
+        dir: Vector2i, occupied: Dictionary, reserved: Dictionary = {}) -> Dictionary:
     var to := from + dir
     if not map.in_bounds(to) or map.is_blocked(to):
         return {}
@@ -32,7 +32,7 @@ static func resolve_step(map: BattleMap, rules: Rules, unit: Unit, from: Vector2
     var damage := fall_damage(rules, unit, - dh)
     var land := to
     var trail: Array[Vector2i] = [to]
-    if occ == null:
+    if occ == null and not reserved.has(land):
         var cur_dir := dir
         var seen := {land: true}
         while map.kind_at(land) == BattleMap.Kind.SLIPPERY:
@@ -40,7 +40,8 @@ static func resolve_step(map: BattleMap, rules: Rules, unit: Unit, from: Vector2
             if sd != Vector2i.ZERO:
                 cur_dir = sd
             var nxt := land + cur_dir
-            if not map.in_bounds(nxt) or map.is_blocked(nxt) or occupied.has(nxt) or seen.has(nxt):
+            if not map.in_bounds(nxt) or map.is_blocked(nxt) or occupied.has(nxt) \
+                    or reserved.has(nxt) or seen.has(nxt):
                 break
             var d2 := map.height_at(nxt) - map.height_at(land)
             if d2 > 0:
@@ -55,9 +56,12 @@ static func resolve_step(map: BattleMap, rules: Rules, unit: Unit, from: Vector2
 
 
 
-static func reachable(map: BattleMap, rules: Rules, unit: Unit, occupied_all: Dictionary) -> Dictionary:
+static func reachable(map: BattleMap, rules: Rules, unit: Unit, occupied_all: Dictionary,
+        reserved_all: Dictionary = {}) -> Dictionary:
     var occupied := occupied_all.duplicate()
     occupied.erase(unit.pos)
+    var reserved := reserved_all.duplicate()
+    reserved.erase(unit.pos)
     var best := {}
     best[unit.pos] = {"cost": 0, "damage": 0, "prev": null, "trail": [], "can_stop": true}
     var frontier: Array[Vector2i] = [unit.pos]
@@ -70,7 +74,7 @@ static func reachable(map: BattleMap, rules: Rules, unit: Unit, occupied_all: Di
         frontier.remove_at(bi)
         var cur_info: Dictionary = best[cur]
         for dir in BattleMap.DIRS:
-            var step := resolve_step(map, rules, unit, cur, dir, occupied)
+            var step := resolve_step(map, rules, unit, cur, dir, occupied, reserved)
             if step.is_empty():
                 continue
             var nc: int = cur_info.cost + step.cost
@@ -84,8 +88,8 @@ static func reachable(map: BattleMap, rules: Rules, unit: Unit, occupied_all: Di
                 var old: Dictionary = best[land]
                 if old.cost < nc or (old.cost == nc and old.damage <= nd):
                     continue
-            best[land] = {"cost": nc, "damage": nd, "prev": cur, "trail": step.trail, 
-                    "can_stop": not occupied.has(land)}
+            best[land] = {"cost": nc, "damage": nd, "prev": cur, "trail": step.trail,
+                    "can_stop": not occupied.has(land) and not reserved.has(land)}
             if not frontier.has(land):
                 frontier.append(land)
     return best

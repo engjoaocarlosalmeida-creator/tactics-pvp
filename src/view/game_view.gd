@@ -71,6 +71,8 @@ var reaction_tiles := {}        # casas do movimento extra (reacao)
 var float_log: Array = []       # (testes) ultimos textos flutuantes
 var _prompt_hint := false
 var _cmd_queue: Array = []
+var _visual_queue: Array[Callable] = []
+var _collecting_visual_events := false
 var _follow_timer := 0.0
 var _t := 0.0
 
@@ -173,8 +175,15 @@ func _ready() -> void :
         _autostart_mode = {"local": Mode.LOCAL, "cpu": Mode.VS_CPU, "demo": Mode.DEMO}.get(args.get("mode", ""), -1)
         if _autostart_mode >= 0:
             start_match(_autostart_mode, seed_arg)
-            for i in int(args.get("bot-turns", 0)):
-                step_cpu()
+            if args.has("bot-turns"):
+                var previous_animate := animate
+                animate = false
+                for i in int(args["bot-turns"]):
+                    if m == null or m.is_over():
+                        break
+                    SimpleBot.take_turn(m, bot_rng)
+                animate = previous_animate
+                _try_refresh()
             if args.has("click-unit") and m != null and not m.is_over():
                 click_tile(m.units[int(args["click-unit"])].pos, Vector2(700, 300))
             if args.has("confirm-demo") and m != null and not m.is_over():
@@ -319,6 +328,8 @@ func setup_match(state: MatchState) -> void :
     m.unit_moved.connect(_on_unit_moved)
     m.unit_hurt.connect(_on_unit_hurt)
     m.unit_died.connect(_on_unit_died)
+    m.unit_dying_turn.connect(_on_unit_dying_turn)
+    m.unit_expired.connect(_on_unit_expired)
     m.attack_resolved.connect(_on_attack_resolved)
     m.match_over.connect(_on_match_over)
     m.reaction_event.connect(_on_reaction_event)
@@ -391,24 +402,31 @@ func _player_name(team: int) -> String:
         return "Computador"
     return "Jogador %d" % (team + 1)
 func step_cpu() -> void:
-    if m == null or m.is_over():
+    if m == null or m.is_over() or busy > 0 or not _visual_queue.is_empty() \
+            or _collecting_visual_events:
         return
     if not m.pending_reaction.is_empty():   # o computador nao usa o movimento extra
-        m.apply_command({"t": "react_skip", "unit": int(m.pending_reaction["unit"])})
-        _try_refresh()
+        _apply_command_with_visuals({"t": "react_skip", "unit": int(m.pending_reaction["unit"])})
         return
-    SimpleBot.take_turn(m, bot_rng)
-    _try_refresh()
+    _apply_command_with_visuals(SimpleBot.next_command(m, bot_rng))
+
+
+func _apply_command_with_visuals(cmd: Dictionary) -> Dictionary:
+    _collecting_visual_events = true
+    var result := m.apply_command(cmd)
+    _collecting_visual_events = false
+    _drain_visual_queue()
+    return result
 
 
 func _command(cmd: Dictionary) -> bool:
     menu_wanted = true
     if mode != Mode.ONLINE:
-        var res := m.apply_command(cmd)
+        var res := _apply_command_with_visuals(cmd)
         _try_refresh()
         return res.ok
     if net.is_host:
-        var res := m.apply_command(cmd)
+        var res := _apply_command_with_visuals(cmd)
         if res.ok:
             net.broadcast(cmd, m.state_hash())
         _try_refresh()
@@ -821,7 +839,7 @@ func _on_net_command_from_client(cmd: Dictionary) -> void:
     if not _client_may_act():
         net.reject()
         return
-    var res := m.apply_command(cmd)
+    var res := _apply_command_with_visuals(cmd)
     if res.ok:
         net.broadcast(cmd, m.state_hash())
     else:
@@ -833,7 +851,7 @@ func _on_net_command_from_client(cmd: Dictionary) -> void:
 func _on_net_command_applied(cmd: Dictionary, host_hash: int) -> void :
     if m == null:
         return
-    m.apply_command(cmd)
+    _apply_command_with_visuals(cmd)
     awaiting = false
     menu_wanted = true
     if host_hash != m.state_hash():
@@ -872,6 +890,10 @@ func _write_report() -> void :
 
 
 func _on_turn_started(u: Unit) -> void :
+    _queue_visual_action(Callable(self, "_present_turn_started").bind(u))
+
+
+func _present_turn_started(u: Unit) -> void:
     mode_pending = ""
     menu_wanted = true
     hud.set_hint("")
@@ -880,10 +902,15 @@ func _on_turn_started(u: Unit) -> void :
 
 
 func _on_unit_moved(u: Unit, path: Array) -> void :
+    _queue_visual_action(Callable(self, "_present_unit_moved").bind(
+            u, path.duplicate(), u.pos, u.facing))
+
+
+func _present_unit_moved(u: Unit, path: Array, destination: Vector2i, facing: Vector2i) -> void:
     var n: Node3D = unit_nodes[u.id]
-    _update_facing_mark(u)
+    CHARACTER_MODEL.set_facing(n.get_node("Body"), facing)
     if _committing_unit == u.id or not animate or path.is_empty():
-        n.position = MapGeometry.tile_pos(m.map, u.pos)
+        n.position = MapGeometry.tile_pos(m.map, destination)
         CHARACTER_MODEL.play_animation(n.get_node("Body"), "Idle")
         return
 
@@ -915,8 +942,7 @@ func _animate_unit_path(u: Unit, path: Array, on_finished := Callable()) -> void
         busy = maxi(0, busy - 1)
         if on_finished.is_valid():
             on_finished.call()
-        else:
-            _try_refresh())
+        _drain_visual_queue())
 
 
 func _face_unit_for_step(unit_id: int, direction: Vector2i) -> void:
@@ -926,6 +952,9 @@ func _face_unit_for_step(unit_id: int, direction: Vector2i) -> void:
 
 func _play_unit_animation(unit_id: int, action: String, duration: float) -> void:
     if unit_nodes.has(unit_id):
+        var attack_action := str(_attack_animations.get(unit_id, ""))
+        if attack_action != "" and attack_action != action:
+            _finish_attack_animation(unit_id, attack_action)
         CHARACTER_MODEL.play_animation(unit_nodes[unit_id].get_node("Body"), action, duration)
 
 
@@ -935,6 +964,10 @@ func _finish_unit_movement(unit_id: int) -> void:
 
 
 func _on_attack_resolved(attacker: Unit, _target: Unit, _tile: Vector2i, _damage: int) -> void:
+    _queue_visual_action(Callable(self, "_present_attack_resolved").bind(attacker, attacker.facing))
+
+
+func _present_attack_resolved(attacker: Unit, facing: Vector2i) -> void:
     if not animate or not unit_nodes.has(attacker.id):
         return
     if _attack_animations.has(attacker.id):
@@ -945,16 +978,23 @@ func _on_attack_resolved(attacker: Unit, _target: Unit, _tile: Vector2i, _damage
     var action: String = ATTACK_ANIMATIONS[index % ATTACK_ANIMATIONS.size()]
     _attack_animation_index[attacker.id] = index + 1
     var node: Node3D = unit_nodes[attacker.id]
-    _update_facing_mark(attacker)
+    CHARACTER_MODEL.set_facing(node.get_node("Body"), facing)
     if not CHARACTER_MODEL.play_animation(node.get_node("Body"), action):
         return
 
     _attack_animations[attacker.id] = action
     busy += 1
+    var duration := CHARACTER_MODEL.animation_duration(node.get_node("Body"), action)
+    get_tree().create_timer(duration + 0.25).timeout.connect(
+            _finish_attack_animation.bind(attacker.id, action))
 
 
 func _on_unit_animation_finished(animation_name: StringName, unit_id: int) -> void:
-    if not _attack_animations.has(unit_id) or _attack_animations[unit_id] != str(animation_name):
+    _finish_attack_animation(unit_id, str(animation_name))
+
+
+func _finish_attack_animation(unit_id: int, action: String) -> void:
+    if not _attack_animations.has(unit_id) or _attack_animations[unit_id] != action:
         return
     _attack_animations.erase(unit_id)
     if unit_nodes.has(unit_id):
@@ -963,31 +1003,98 @@ func _on_unit_animation_finished(animation_name: StringName, unit_id: int) -> vo
 
 
 func _on_unit_hurt(u: Unit, amount: int, reason: String) -> void :
+    _queue_visual_action(Callable(self, "_present_unit_hurt").bind(u, amount, reason, u.hp))
+
+
+func _present_unit_hurt(u: Unit, amount: int, reason: String, hp_after_hit: int) -> void:
     var cause := "queda" if reason == "fall" else "ataque"
     hud.add_log("%s perde %d de vida (%s)" % [u.display_name, amount, cause])
-    _update_unit_visual(u)
+    var hp_fill: Sprite3D = unit_nodes[u.id].get_node("Over/HpFill")
+    var ratio := float(hp_after_hit) / maxf(1.0, float(u.max_hp))
+    hp_fill.region_rect = Rect2(0, 0, maxf(0.0, 80.0 * ratio), 8)
+    hp_fill.visible = hp_after_hit > 0
     var node: Node3D = unit_nodes[u.id]
-    _float_text(node.position, "-%d" % amount, Color(1, 0.4, 0.3))
+    var damage_ratio := float(amount) / maxf(1.0, float(u.max_hp))
+    var damage_size := 32 + roundi(clampf(damage_ratio, 0.0, 1.5) * 18.0)
+    _float_text(node.position, "-%d" % amount, Color(1, 0.4, 0.3), damage_size, 0.6)
     if animate:
         CHARACTER_MODEL.flash(node.get_node("Body"), create_tween())
+        _pause_visual_sequence(0.6)
 
 
 func _on_unit_died(u: Unit) -> void :
-    hud.add_log("%s foi derrotado!" % u.display_name)
+    _queue_visual_action(Callable(self, "_present_unit_died").bind(u, u.dying_turns))
+
+
+func _present_unit_died(u: Unit, turns_left: int) -> void:
+    hud.add_log("%s caiu e está morrendo (%d turnos)." % [u.display_name, turns_left])
     var node: Node3D = unit_nodes[u.id]
+    _show_dying_status(u, turns_left)
+    if not animate:
+        return
+    var body: Node3D = node.get_node("Body")
+    var action := "death_forward" if randi_range(0, 1) == 0 else "death_back"
+    if not CHARACTER_MODEL.play_animation(body, action):
+        return
+    busy += 1
+    var duration := CHARACTER_MODEL.animation_duration(body, action)
+    get_tree().create_timer(duration + 0.25).timeout.connect(_anim_done)
+
+
+func _on_unit_dying_turn(u: Unit, turns_left: int) -> void:
+    _queue_visual_action(Callable(self, "_present_unit_dying_turn").bind(u, turns_left))
+
+
+func _present_unit_dying_turn(u: Unit, turns_left: int) -> void:
+    if turns_left <= 0:
+        hud.add_log("%s não resistiu aos ferimentos." % u.display_name)
+        if animate:
+            _pause_visual_sequence(0.25)
+        return
+    hud.add_log("%s continua morrendo (%d turnos)." % [u.display_name, turns_left])
+    _show_dying_status(u, turns_left)
     if animate:
-        busy += 1
-        var tw := create_tween()
-        tw.tween_property(node, "scale", Vector3(0.01, 0.01, 0.01), 0.35)
-        tw.finished.connect( func():
-            node.visible = false
-            _anim_done())
-    else:
-        node.visible = false
+        _pause_visual_sequence(0.4)
+
+
+func _show_dying_status(u: Unit, turns_left: int) -> void:
+    var node: Node3D = unit_nodes[u.id]
+    var hp_fill: Sprite3D = node.get_node("Over/HpFill")
+    hp_fill.visible = false
+    node.get_node("Over/ApFill").visible = false
+    node.get_node("Over/ApBack").visible = false
+    var turns: Label3D = node.get_node("Over/Turns")
+    turns.text = "Morrendo: %d" % turns_left
+    turns.modulate = Color(1.0, 0.35, 0.35)
+    turns.visible = true
+
+
+func _on_unit_expired(u: Unit) -> void:
+    _queue_visual_action(Callable(self, "_present_unit_expired").bind(u))
+
+
+func _present_unit_expired(u: Unit) -> void:
+    var node: Node3D = unit_nodes[u.id]
+    var body := node.get_node_or_null("Body") as Node3D
+    if body != null:
+        node.remove_child(body)
+        body.queue_free()
+    var skull := CHARACTER_MODEL.create_skull()
+    if skull != null:
+        node.add_child(skull)
+    node.get_node("Ring").visible = false
+    node.get_node("Over/HpFill").visible = false
+    node.get_node("Over/ApFill").visible = false
+    node.get_node("Over/ApBack").visible = false
+    node.get_node("Over/Turns").visible = false
 
 
 
 func _on_xp_gained(u: Unit, job_xp: int, char_xp: int, flag: int) -> void :
+    _queue_visual_action(Callable(self, "_present_xp_gained").bind(u, job_xp, char_xp, flag))
+
+
+func _present_xp_gained(u: Unit, job_xp: int, char_xp: int, flag: int) -> void:
     var res := Progression.apply_xp(rules, catalog, roster.by_id(), u, job_xp, char_xp)
     if res.is_empty():
         return
@@ -1009,6 +1116,8 @@ func _on_xp_gained(u: Unit, job_xp: int, char_xp: int, flag: int) -> void :
         var ch2: Character = roster.by_id()[cid]
         hud.add_log("%s: classe nível %d!" % [ch2.first_name(), ch2.job_level(rules, ch2.job_id)])
     _save_roster()
+    if animate:
+        _pause_visual_sequence(1.0)
 
 
 func _on_match_over(_winner: int) -> void :
@@ -1017,11 +1126,32 @@ func _on_match_over(_winner: int) -> void :
 
 func _anim_done() -> void :
     busy = maxi(0, busy - 1)
-    _try_refresh()
+    _drain_visual_queue()
+
+
+func _queue_visual_action(action: Callable) -> void:
+    _visual_queue.append(action)
+    if not _collecting_visual_events:
+        _drain_visual_queue()
+
+
+func _drain_visual_queue() -> void:
+    if _collecting_visual_events or busy > 0:
+        return
+    while not _visual_queue.is_empty() and busy == 0:
+        var action: Callable = _visual_queue.pop_front()
+        action.call()
+    if _visual_queue.is_empty() and busy == 0:
+        _try_refresh()
+
+
+func _pause_visual_sequence(duration: float) -> void:
+    busy += 1
+    get_tree().create_timer(duration).timeout.connect(_anim_done)
 
 
 func _try_refresh() -> void :
-    if busy > 0 or m == null:
+    if busy > 0 or not _visual_queue.is_empty() or _collecting_visual_events or m == null:
         return
     _refresh()
 func _refresh() -> void:
@@ -1034,7 +1164,7 @@ func _refresh() -> void:
     reaction_tiles.clear()
     for u in m.units:
         _update_unit_visual(u)
-        _update_facing_mark(u)
+        _update_unit_facing(u)
         unit_nodes[u.id].get_node("Ring").visible = (not m.is_over()) and u == m.active and u.is_alive()
         unit_nodes[u.id].get_node("Over/Pointer").visible = false
     if m.is_over():
@@ -1306,6 +1436,8 @@ func _clear_world() -> void :
     unit_nodes.clear()
     _attack_animation_index.clear()
     _attack_animations.clear()
+    _visual_queue.clear()
+    _collecting_visual_events = false
     move_tiles.clear()
     target_tiles.clear()
     hover_marker.visible = false
@@ -1399,18 +1531,6 @@ func _build_units() -> void :
         ring.visible = false
         n.add_child(ring)
 
-        var mark := MeshInstance3D.new()   # cone na borda da base: para onde o personagem esta virado
-        mark.name = "FacingMark"
-        var cone := CylinderMesh.new()
-        cone.top_radius = 0.0
-        cone.bottom_radius = 0.14
-        cone.height = 0.34
-        mark.mesh = cone
-        var mmat := StandardMaterial3D.new()
-        mmat.albedo_color = TEAM_COLORS[u.team].lightened(0.35)
-        mmat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-        mark.material_override = mmat
-        n.add_child(mark)
         var over := Node3D.new()
         over.name = "Over"
         var back := _hp_sprite(Color(0.03, 0.04, 0.1, 0.95), 82.0, -41.0)
@@ -1455,7 +1575,7 @@ func _build_units() -> void :
         n.position = MapGeometry.tile_pos(m.map, u.pos)
         units_root.add_child(n)
         unit_nodes[u.id] = n
-        _update_facing_mark(u)
+        _update_unit_facing(u)
         _update_unit_visual(u)
 func _hp_sprite(color: Color, width_px: float, offset_x: float, height := 8, off_y := 0.0) -> Sprite3D:
     var s := Sprite3D.new()
@@ -1485,21 +1605,33 @@ func _update_unit_visual(u: Unit) -> void :
     var ally := u.team == ally_team()
     var col := ALLY_COLOR if ally else ENEMY_COLOR
     var fill: Sprite3D = n.get_node("Over/HpFill")
+    var ap: Sprite3D = n.get_node("Over/ApFill")
+    var turns: Label3D = n.get_node("Over/Turns")
+    if u.is_expired():
+        fill.visible = false
+        ap.visible = false
+        n.get_node("Over/ApBack").visible = false
+        turns.visible = false
+        return
     var ratio := float(u.hp) / maxf(1.0, float(u.max_hp))
     fill.region_rect = Rect2(0, 0, maxf(0.0, 80.0 * ratio), 8)
     fill.modulate = col
-    fill.visible = u.hp > 0
-    var ap: Sprite3D = n.get_node("Over/ApFill")
+    fill.visible = u.is_alive()
     ap.region_rect = Rect2(0, 0, 80.0 * _action_remaining(u), 4)
     ap.visible = u.hp > 0
     n.get_node("Over/ApBack").visible = u.hp > 0
-    var turns: Label3D = n.get_node("Over/Turns")
+    if u.is_dying():
+        turns.text = "Morrendo: %d" % u.dying_turns
+        turns.modulate = Color(1.0, 0.35, 0.35)
+        turns.visible = true
+        return
     var tu := m.turns_until(u) if u.is_alive() else -1
     turns.text = str(tu) if tu >= 0 else "+"
     turns.modulate = col.lightened(0.35)
     turns.outline_modulate = col.darkened(0.15)
     turns.visible = u.is_alive()
-func _float_text(pos: Vector3, text: String, color: Color) -> void :
+func _float_text(pos: Vector3, text: String, color: Color, font_size := 34,
+        duration := 1.0) -> void :
     var l := Label3D.new()
     l.text = text
     l.modulate = color
@@ -1507,15 +1639,15 @@ func _float_text(pos: Vector3, text: String, color: Color) -> void :
     l.billboard = BaseMaterial3D.BILLBOARD_ENABLED
     l.no_depth_test = true
     l.pixel_size = 0.008
-    l.font_size = 34
+    l.font_size = font_size
     l.outline_size = 9
     add_child(l)
     l.position = pos + Vector3(0, SPRITE_H + 0.35, 0)
     if animate:
         var tw := create_tween()
         tw.set_parallel(true)
-        tw.tween_property(l, "position:y", l.position.y + 0.7, 1.0)
-        tw.tween_property(l, "modulate:a", 0.0, 1.0)
+        tw.tween_property(l, "position:y", l.position.y + 0.7, duration)
+        tw.tween_property(l, "modulate:a", 0.0, duration)
         tw.chain().tween_callback(l.queue_free)
     else:
         l.queue_free()
@@ -1728,22 +1860,24 @@ static func reaction_color(kind: String) -> Color:
 
 ## Reacoes aparecem so com o nome e o feito (o jogo nao explica as regras na tela).
 func _on_reaction_event(u: Unit, kind: String, text: String) -> void:
+    _queue_visual_action(Callable(self, "_present_reaction_event").bind(u, kind, text))
+
+
+func _present_reaction_event(u: Unit, kind: String, text: String) -> void:
     if unit_nodes.has(u.id):
         _float_text(unit_nodes[u.id].position, text, reaction_color(kind))
     float_log.append([text, kind])
     if float_log.size() > 30:
         float_log.pop_front()
+    if animate:
+        _pause_visual_sequence(1.0)
 
 
-func _update_facing_mark(u: Unit) -> void:
+func _update_unit_facing(u: Unit) -> void:
     var node: Node3D = unit_nodes[u.id]
-    var model: Node3D = node.get_node("Body")
-    CHARACTER_MODEL.set_facing(model, u.facing)
-    var mark: MeshInstance3D = node.get_node("FacingMark")
-    var f := Vector3(u.facing.x, 0, u.facing.y)
-    mark.visible = u.is_alive()
-    mark.position = f * 0.47 + Vector3(0, 0.14, 0)
-    mark.basis = Basis(Quaternion(Vector3.UP, f)) if f != Vector3.ZERO else Basis.IDENTITY
+    var model := node.get_node_or_null("Body") as Node3D
+    if model != null:
+        CHARACTER_MODEL.set_facing(model, u.facing)
 
 
 ## 0 = clique normal; 1 = tratado; -1 = tratado e ignorado.

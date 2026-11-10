@@ -7,6 +7,8 @@ const SOURCES := {
     "jump_down": "Arhcer_MASC_jump_down.fbx",
     "espadada_dentroparafora": "Arhcer_MASC_espadada_dentroparafora.fbx",
     "espadada_foraparadentro": "Arhcer_MASC_espadada_foraparadentro.fbx",
+    "death_forward": "Arhcer_MASC_Forward_Death.fbx",
+    "death_back": "Arhcer_MASC_Back_death.fbx",
 }
 const SOURCE_DIR := "res://assets/models/animations/"
 const OUTPUT_PATH := "res://assets/models/character_animations.tres"
@@ -38,6 +40,8 @@ func _build() -> void:
         animation.resource_name = action
         if action in ["Idle", "walk"]:
             animation.loop_mode = Animation.LOOP_LINEAR
+        elif action in ["jump_up", "jump_down", "death_forward", "death_back"]:
+            _remove_horizontal_root_motion(animation)
         var add_animation_error := library.add_animation(action, animation)
         character.free()
         if add_animation_error != OK:
@@ -52,3 +56,20 @@ func _build() -> void:
         return
     print("Animacoes salvas: ", SOURCES.keys())
     quit()
+
+
+func _remove_horizontal_root_motion(animation: Animation) -> void:
+    for track in animation.get_track_count():
+        if animation.track_get_type(track) != Animation.TYPE_POSITION_3D:
+            continue
+        if not str(animation.track_get_path(track)).ends_with(":mixamorig_Hips"):
+            continue
+        var key_count := animation.track_get_key_count(track)
+        if key_count == 0:
+            continue
+        var initial_position: Vector3 = animation.track_get_key_value(track, 0)
+        for key in key_count:
+            var position: Vector3 = animation.track_get_key_value(track, key)
+            position.x = initial_position.x
+            position.z = initial_position.z
+            animation.track_set_key_value(track, key, position)
