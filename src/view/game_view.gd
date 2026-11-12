@@ -785,7 +785,7 @@ func cancel_all() -> void:
         menu_wanted = true
         _try_refresh()
     else:
-        menu_wanted = false
+        menu_wanted = true
 
 
 func wait() -> void :
