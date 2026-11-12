@@ -4,7 +4,7 @@
 ## --seed=N --shot=arquivo.png --bot-turns=N --net=host|join --ip= --port= --auto-play --quit-on-end
 ## --fast --report= --roster= --open=team|classes|items|account|wiki --no-splash --cam=yaw,pitch,dist
 ## --focus=x,z.
-class_name GameView
+class_name MainGameView
 extends Node3D
 
 

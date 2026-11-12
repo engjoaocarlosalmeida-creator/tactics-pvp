@@ -1,4 +1,4 @@
-## Bot tatico. Decide UM comando serializavel por vez (next_command) e joga turnos inteiros
+##Bot tatico. Decide UM comando serializavel por vez (next_command) e joga turnos inteiros
 ## (take_turn). Usado no modo contra o computador, nos testes e no auto-play online dos testes.
 class_name SimpleBot
 extends RefCounted

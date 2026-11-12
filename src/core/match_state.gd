@@ -56,7 +56,7 @@ static func create(map_seed: int, r: Rules) -> MatchState:
 
 
 
-static func create_from_characters(map_seed: int, r: Rules, catalog: JobCatalog, 
+static func create_from_characters(map_seed: int, r: Rules, catalog: JobCatalog,
         team0: Array, team1: Array) -> MatchState:
     var gen := MapGenerator.generate(map_seed, r)
     var us: Array[Unit] = []
