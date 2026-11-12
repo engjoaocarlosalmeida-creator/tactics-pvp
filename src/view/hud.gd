@@ -331,7 +331,7 @@ func _input(event: InputEvent) -> void :
 		var press: bool = (event is InputEventKey and event.pressed and not event.echo)\
 or (event is InputEventMouseButton and event.pressed) or (event is InputEventJoypadButton and event.pressed)
 		if press:
-			get_viewport().set_input_as_handled()
+			pass
 			splash.visible = false
 			splash_done.emit()
 
