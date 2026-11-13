@@ -1,0 +1,4 @@
+# Regras Estritas de Execução
+- NUNCA explique o que você vai fazer antes de chamar uma ferramenta. Execute a ferramenta imediatamente.
+- NUNCA escreva resumos longos, introduções ou conclusões após concluir uma tarefa. Responda em no máximo 2 linhas curtas em Português do Brasil.
+- Não repita o código alterado na resposta do chat; aplique a mudança direto no arquivo.
