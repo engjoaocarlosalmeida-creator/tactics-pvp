@@ -8,9 +8,7 @@ class_name MainGameView
 extends Node3D
 
 
-
-
-enum Mode{LOCAL, VS_CPU, DEMO, ONLINE}
+enum Mode {LOCAL, VS_CPU, DEMO, ONLINE}
 
 const CHARACTER_MODEL := preload("res://src/view/character_model.gd")
 const TEAM_COLORS: Array[Color] = [Color(0.25, 0.55, 1.0), Color(1.0, 0.35, 0.3)]
@@ -70,8 +68,8 @@ var preview := {}
 var _committing_unit := -1
 var attack_area := {}
 var menu_unit: Unit
-var reaction_tiles := {}        # casas do movimento extra (reacao)
-var float_log: Array = []       # (testes) ultimos textos flutuantes
+var reaction_tiles := {} # casas do movimento extra (reacao)
+var float_log: Array = [] # (testes) ultimos textos flutuantes
 var _prompt_hint := false
 var _cmd_queue: Array = []
 var _visual_queue: Array[Callable] = []
@@ -82,11 +80,13 @@ var _t := 0.0
 
 var mode_pending := ""
 var menu_wanted := true
+var options_menu: Control
 var pending_confirm := Callable()
-var screen: CanvasLayer
+var pause_menu: Control
 var team_screen: TeamScreen
 
 
+var screen
 var net: NetSession
 var my_team := 0
 var awaiting := false
@@ -102,7 +102,7 @@ var account: Account
 var account_path := Account.PATH
 
 
-func _ready() -> void :
+func _ready() -> void:
     rules = Rules.load_default()
     catalog = JobCatalog.load_default()
     var args := {}
@@ -116,7 +116,7 @@ func _ready() -> void :
     account = Account.new() if test_mode else Account.load_or_create()
     if not test_mode:
         settings.apply_to_window()
-    _build_environment()
+        _build_environment()
     hud = Hud.new()
     add_child(hud)
     net = NetSession.new()
@@ -128,24 +128,38 @@ func _ready() -> void :
     hud.order_clicked.connect(_on_order_clicked)
     hud.options_requested.connect(_show_options)
     hud.option_changed.connect(_on_option_changed)
-    hud.team_requested.connect( func(): open_screen("team"))
-    hud.account_requested.connect( func(): open_screen("account"))
-    hud.wiki_requested.connect( func(): open_screen("wiki"))
-    hud.splash_done.connect( func(): hud.show_menu())
-    hud.items_requested.connect( func(): open_screen("items"))
-    hud.menu_choice.connect( func(md): start_match(md))
-    hud.restart_pressed.connect( func(): _restart())
-    hud.menu_pressed.connect( func(): _show_menu())
-    hud.quit_pressed.connect( func(): get_tree().quit())
-    hud.host_requested.connect( func(): _start_host(NetSession.DEFAULT_PORT))
-    hud.join_requested.connect( func(addr): _start_join(addr, NetSession.DEFAULT_PORT))
+    hud.team_requested.connect(func(): open_screen("team"))
+    hud.account_requested.connect(func(): open_screen("account"))
+    hud.wiki_requested.connect(func(): open_screen("wiki"))
+    hud.splash_done.connect(func(): hud.show_menu())
+    hud.items_requested.connect(func(): open_screen("items"))
+    hud.menu_choice.connect(func(md): start_match(md))
+    hud.restart_pressed.connect(func(): _restart())
+    hud.menu_pressed.connect(func(): _show_menu())
+    hud.quit_pressed.connect(func(): get_tree().quit())
+    hud.host_requested.connect(func(): _start_host(NetSession.DEFAULT_PORT))
+    hud.join_requested.connect(func(addr): _start_join(addr, NetSession.DEFAULT_PORT))
     net.setup_received.connect(_on_net_setup)
     net.command_from_client.connect(_on_net_command_from_client)
     net.command_applied.connect(_on_net_command_applied)
-    net.command_rejected.connect( func(): awaiting = false;_try_refresh())
+    net.command_rejected.connect(func(): awaiting = false; _try_refresh())
     net.lost_connection.connect(_on_net_lost)
-    net.connection_failed.connect( func(): hud.show_message("Não conectou", "Não foi possível conectar. Confira o IP e se o anfitrião já está esperando."))
-    net.client_joined.connect( func(): hud.show_waiting("Adversário conectou", "Preparando a partida..."))
+    net.connection_failed.connect(func(): hud.show_message("Não conectou", "Não foi possível conectar. Confira o IP e se o anfitrião já está esperando."))
+    net.client_joined.connect(func(): hud.show_waiting("Adversário conectou", "Preparando a partida..."))
+
+    var pause_layer = CanvasLayer.new()
+    pause_layer.layer = 100
+    add_child(pause_layer)
+
+    var pm = Control.new()
+    pm.set_script(load("res://src/view/pause_menu.gd"))
+    pm.name = "PauseMenu"
+    pm.set_anchors_preset(Control.PRESET_CENTER)
+    pm.custom_minimum_size = Vector2(400, 300)
+    pm.visible = false
+    pause_layer.add_child(pm)
+    pause_menu = pm
+
     if test_mode:
         return
     auto_play = args.has("auto-play")
@@ -194,51 +208,49 @@ func _ready() -> void :
                 choose("move_mode")
                 click_tile(dest)
         else:
-            _show_menu( not args.has("no-splash"))
+            _show_menu(not args.has("no-splash"))
 
 
-
-
-func open_screen(kind: String) -> void :
+func open_screen(kind: String) -> void:
     close_screen()
     hud.hide_overlay()
+
+    var new_screen
     match kind:
         "team":
-            team_screen = TeamScreen.new()
-            screen = team_screen
+            new_screen = TeamScreen.new()
         "classes":
-            var cs := ClassScreen.new()
-            screen = cs
+            new_screen = ClassScreen.new()
         "items":
-            var its := ItemsScreen.new()
-            screen = its
+            new_screen = ItemsScreen.new()
         "account":
-            var acs := AccountScreen.new()
-            acs.account = account
-            screen = acs
+            new_screen = AccountScreen.new()
+            new_screen.account = account
         "wiki":
-            screen = WikiScreen.new()
+            new_screen = WikiScreen.new()
         _:
             _show_menu()
             return
-    add_child(screen)
-    screen.setup(rules, catalog, roster)
-    if screen.has_signal("changed"):
-        screen.changed.connect(_save_roster)
-    if screen.has_signal("open_other"):
-        screen.open_other.connect( func(k, char_index): _open_from_screen(k, char_index))
-    screen.closed.connect( func():
+
+    self.screen = new_screen
+    add_child(self.screen)
+    self.screen.setup(rules, catalog, roster)
+    if self.screen.has_signal("changed"):
+        self.screen.changed.connect(_save_roster)
+    if self.screen.has_signal("open_other"):
+        self.screen.open_other.connect(func(k, char_index): _open_from_screen(k, char_index))
+    self.screen.closed.connect(func():
         close_screen()
         _show_menu())
 
 
-func _open_from_screen(kind: String, char_index: int) -> void :
+func _open_from_screen(kind: String, char_index: int) -> void:
     open_screen(kind)
     if screen != null and screen.has_method("focus_character"):
         screen.focus_character(char_index)
 
 
-func close_screen() -> void :
+func close_screen() -> void:
     if screen != null:
         remove_child(screen)
         screen.queue_free()
@@ -246,22 +258,22 @@ func close_screen() -> void :
         team_screen = null
 
 
-func open_team_screen() -> void :
+func open_team_screen() -> void:
     open_screen("team")
 
 
-func close_team_screen() -> void :
+func close_team_screen() -> void:
     close_screen()
-func _save_roster() -> void :
+func _save_roster() -> void:
     if not test_mode or save_in_test:
         roster.save(roster_path)
     _save_account()
 
 
-func _save_account() -> void :
+func _save_account() -> void:
     if not test_mode or save_in_test:
         account.save(account_path)
-func _show_menu(with_splash := false) -> void :
+func _show_menu(with_splash := false) -> void:
     net.close()
     awaiting = false
     _clear_world()
@@ -284,11 +296,11 @@ func _options_values() -> Dictionary:
             "can_resize": settings.display_mode == Settings.MODE_WINDOW, "volume": settings.volume}
 
 
-func _show_options() -> void :
+func _show_options() -> void:
     hud.show_options(_options_values())
 
 
-func _on_option_changed(key: String, delta: int) -> void :
+func _on_option_changed(key: String, delta: int) -> void:
     var screen_size := DisplayServer.screen_get_size() if DisplayServer.get_name() != "headless" else Vector2i(1920, 1080)
     settings.change(key, delta, screen_size)
     if not test_mode:
@@ -297,14 +309,14 @@ func _on_option_changed(key: String, delta: int) -> void :
     hud.show_options(_options_values())
 
 
-func _restart() -> void :
+func _restart() -> void:
     if mode == Mode.ONLINE:
         _show_menu()
     else:
         start_match(mode)
 
 
-func start_match(new_mode: int, seed_value: int = -1) -> void :
+func start_match(new_mode: int, seed_value: int = -1) -> void:
     mode = new_mode
     match_seed = seed_value if seed_value >= 0 else randi() % 100000
     bot_rng.seed = match_seed
@@ -316,8 +328,7 @@ func start_match(new_mode: int, seed_value: int = -1) -> void :
     setup_match(state)
 
 
-
-func setup_match(state: MatchState) -> void :
+func setup_match(state: MatchState) -> void:
     _clear_world()
     end_shown = false
     last_rewards = {}
@@ -336,7 +347,7 @@ func setup_match(state: MatchState) -> void :
     m.attack_resolved.connect(_on_attack_resolved)
     m.match_over.connect(_on_match_over)
     m.reaction_event.connect(_on_reaction_event)
-    m.manual_facing_teams = _manual_teams()   # quem joga escolhe o lado ao fim do turno
+    m.manual_facing_teams = _manual_teams() # quem joga escolhe o lado ao fim do turno
     m.xp_gained.connect(_on_xp_gained)
     _build_terrain()
     _build_units()
@@ -350,7 +361,6 @@ func setup_match(state: MatchState) -> void :
     _try_refresh()
 
 
-
 func ally_team() -> int:
     return my_team if mode == Mode.ONLINE else 0
 
@@ -359,8 +369,7 @@ func _sex_icon(sex: String) -> String:
     return "[img=16]res://assets/icons/sex_%s.png[/img]" % ("f" if sex == "f" else "m")
 
 
-
-func _follow(_u: Unit) -> void :
+func _follow(_u: Unit) -> void:
     _follow_timer = 1.1
 
 
@@ -371,8 +380,7 @@ func _actor_center() -> Vector3:
     return Vector3(p.x, 0, p.z)
 
 
-
-func _cycle_actor(dir: int) -> void :
+func _cycle_actor(dir: int) -> void:
     if not _human_turn() or hud.confirm_visible() or m.active.moved or m.active.acted:
         return
     var cands: Array[Unit] = [m.active]
@@ -381,7 +389,7 @@ func _cycle_actor(dir: int) -> void :
             cands.append(o)
     if cands.size() < 2:
         return
-    cands.sort_custom( func(a: Unit, b: Unit): return a.id < b.id)
+    cands.sort_custom(func(a: Unit, b: Unit): return a.id < b.id)
     var nxt: Unit = cands[(cands.find(m.active) + dir + cands.size()) % cands.size()]
     menu_wanted = true
     _command({"t": "switch", "unit": m.active.id, "to": nxt.id})
@@ -389,7 +397,6 @@ func _cycle_actor(dir: int) -> void :
 
 func _cpu_controls(u: Unit) -> bool:
     return mode == Mode.DEMO or (mode == Mode.VS_CPU and u.team == 1)
-
 
 
 func _input_locked(u: Unit) -> bool:
@@ -408,7 +415,7 @@ func step_cpu() -> void:
     if m == null or m.is_over() or busy > 0 or not _visual_queue.is_empty() \
             or _collecting_visual_events:
         return
-    if not m.pending_reaction.is_empty():   # o computador nao usa o movimento extra
+    if not m.pending_reaction.is_empty(): # o computador nao usa o movimento extra
         _apply_command_with_visuals({"t": "react_skip", "unit": int(m.pending_reaction["unit"])})
         return
     _apply_command_with_visuals(SimpleBot.next_command(m, bot_rng))
@@ -444,8 +451,6 @@ func _human_turn() -> bool:
     return m != null and not m.is_over() and busy == 0 and not _input_locked(m.active)
 
 
-
-
 func _unit_at(p: Vector2i) -> Unit:
     for u in m.units:
         if u.is_alive() and u.pos == p:
@@ -462,7 +467,7 @@ func _unit_menu_items() -> Array:
     var act := m.active
     var items: Array = []
     if act.down:
-        items.append(_item("stand", "Levantar", not act.moved))   # personagem caido gasta a acao de movimento
+        items.append(_item("stand", "Levantar", not act.moved)) # personagem caido gasta a acao de movimento
     else:
         items.append(_item("move_mode", "Mover", not move_tiles.is_empty() or mode_pending == "move"))
     items.append(_item("skill_basic", "Atacar" if not act.acted else "Atacar (já atacou)", not act.acted))
@@ -471,14 +476,13 @@ func _unit_menu_items() -> Array:
     return items
 
 
-func open_unit_menu() -> void :
+func open_unit_menu() -> void:
     if not _human_turn() or hud.confirm_visible():
         return
     hud.hide_target_window()
     var act := m.active
     menu_unit = act
     hud.show_context_menu(act.short_name(), _unit_menu_items(), _menu_anchor(act), get_viewport().get_visible_rect().size)
-
 
 
 func _menu_anchor(u: Unit) -> Vector2:
@@ -526,8 +530,7 @@ func click_tile(p: Vector2i, _screen_pos: Vector2 = Vector2(40, 40)) -> bool:
         _try_refresh()
         return true
     if target != null and target.team == m.active.team:
-
-        if _human_turn() and not m.active.moved and not m.active.acted and m.ready_alternates(m.active).has(target)\
+        if _human_turn() and not m.active.moved and not m.active.acted and m.ready_alternates(m.active).has(target) \
 and m.has_actions(target):
             menu_wanted = true
             _follow(target)
@@ -540,8 +543,7 @@ and m.has_actions(target):
     return true
 
 
-
-func _preview_move(p: Vector2i) -> void :
+func _preview_move(p: Vector2i) -> void:
     var u := m.active
     var path := Pathing.path_to(m.reachable_for(u), p)
     preview = {"unit": u, "from": u.pos, "to": p}
@@ -554,7 +556,7 @@ func _preview_move(p: Vector2i) -> void :
     _animate_unit_path(u, path, ask)
 
 
-func _commit_preview() -> void :
+func _commit_preview() -> void:
     if preview.is_empty():
         return
     var u: Unit = preview["unit"]
@@ -565,7 +567,7 @@ func _commit_preview() -> void :
     _committing_unit = -1
 
 
-func _cancel_preview() -> void :
+func _cancel_preview() -> void:
     if preview.is_empty():
         return
     var u: Unit = preview["unit"]
@@ -574,7 +576,6 @@ func _cancel_preview() -> void :
     CHARACTER_MODEL.play_animation(node.get_node("Body"), "Idle")
     CHARACTER_MODEL.set_facing(node.get_node("Body"), u.facing)
     preview = {}
-
 
 
 func _approach_tile(u: Unit, t: Unit) -> Vector2i:
@@ -592,7 +593,7 @@ func _approach_tile(u: Unit, t: Unit) -> Vector2i:
     return best
 
 
-func _do_attack_approach(t: Unit) -> void :
+func _do_attack_approach(t: Unit) -> void:
     var u := m.active
     var dest := _approach_tile(u, t)
     var cmds: Array = []
@@ -600,7 +601,6 @@ func _do_attack_approach(t: Unit) -> void :
         cmds.append({"t": "move", "unit": u.id, "x": dest.x, "y": dest.y})
     cmds.append({"t": "attack", "unit": u.id, "target": t.id})
     _run_commands(cmds)
-
 
 
 func _run_commands(cmds: Array) -> bool:
@@ -629,15 +629,14 @@ func _attack_text(u: Unit, t: Unit) -> String:
     return "Atacar [b]%s[/b] com Ataque básico?\nDano previsto: %d" % [t.display_name, m.attack_damage(u, t)]
 
 
-func _ask_confirm(text: String, action: Callable) -> void :
+func _ask_confirm(text: String, action: Callable) -> void:
     pending_confirm = action
     hud.hide_context_menu()
     hud.set_hint("")
     hud.show_confirm(text, get_viewport().get_visible_rect().size)
 
 
-
-func confirm_accept() -> void :
+func confirm_accept() -> void:
     var action := pending_confirm
     pending_confirm = Callable()
     hud.hide_confirm()
@@ -646,7 +645,7 @@ func confirm_accept() -> void :
         action.call()
 
 
-func confirm_reject() -> void :
+func confirm_reject() -> void:
     pending_confirm = Callable()
     hud.hide_confirm()
     _cancel_preview()
@@ -655,13 +654,13 @@ func confirm_reject() -> void :
     _try_refresh()
 
 
-func _do_move(p: Vector2i) -> void :
+func _do_move(p: Vector2i) -> void:
     _command({"t": "move", "unit": m.active.id, "x": p.x, "y": p.y})
 
 
-func _do_attack(t: Unit) -> void :
+func _do_attack(t: Unit) -> void:
     _command({"t": "attack", "unit": m.active.id, "target": t.id})
-func _open_target_window(t: Unit) -> void :
+func _open_target_window(t: Unit) -> void:
     var act := m.active
     var enemy := t.team != act.team
     var can := enemy and not act.acted and _human_turn() and _approach_tile(act, t) != Picking.NONE
@@ -751,12 +750,12 @@ func _ask_switch(to_id: int) -> bool:
     return true
 
 
-func _on_order_clicked(unit_id: int) -> void :
+func _on_order_clicked(unit_id: int) -> void:
     if _human_turn() and not hud.confirm_visible():
         _ask_switch(unit_id)
 
 
-func _open_items_window(u: Unit) -> void :
+func _open_items_window(u: Unit) -> void:
     var cat := ItemCatalog.get_default()
     var rows: Array = []
     for id in u.items:
@@ -769,12 +768,12 @@ func cancel_all() -> void:
     if hud.confirm_visible():
         confirm_reject()
         return
-    if m != null and not m.pending_reaction.is_empty():   # cancelar o movimento extra
+    if m != null and not m.pending_reaction.is_empty(): # cancelar o movimento extra
         var o := m.pending_unit()
         if o != null and _owner_human(o):
             _command({"t": "react_skip", "unit": o.id})
         return
-    if m != null and m.awaiting_facing and _owner_human(m.active):   # Esc mantem o lado atual
+    if m != null and m.awaiting_facing and _owner_human(m.active): # Esc mantem o lado atual
         _command({"t": "face", "unit": m.active.id, "dir": maxi(0, BattleMap.DIRS.find(m.active.facing))})
         return
     _cancel_preview()
@@ -788,14 +787,12 @@ func cancel_all() -> void:
         menu_wanted = true
 
 
-func wait() -> void :
+func wait() -> void:
     if _human_turn() and not hud.confirm_visible():
         choose("end_turn")
 
 
-
-
-func _start_host(port: int) -> void :
+func _start_host(port: int) -> void:
     var err := net.host_game(port, _my_team_dicts())
     if err != OK:
         hud.show_message("Não foi possível hospedar", "A porta %d está em uso. Feche outra cópia do jogo e tente de novo." % port)
@@ -805,7 +802,7 @@ func _start_host(port: int) -> void :
             "Peça para o outro jogador escolher [b]Jogar online → Entrar[/b] e digitar este IP:\n[b]%s[/b]  (porta %d)\n[color=#aab]Pela internet, é preciso liberar a porta %d no roteador. Pela Steam isso não será necessário.[/color]" % [NetSession.local_ip(), port, port])
 
 
-func _start_join(address: String, port: int) -> void :
+func _start_join(address: String, port: int) -> void:
     var err := net.join_game(address, port, _my_team_dicts())
     if err != OK:
         hud.show_message("Não conectou", "Endereço inválido: %s" % address)
@@ -821,7 +818,7 @@ func _my_team_dicts() -> Array:
     return out
 
 
-func _on_net_setup(seed_value: int, t0: Array, t1: Array) -> void :
+func _on_net_setup(seed_value: int, t0: Array, t1: Array) -> void:
     mode = Mode.ONLINE
     my_team = 0 if net.is_host else 1
     match_seed = seed_value
@@ -851,7 +848,7 @@ func _on_net_command_from_client(cmd: Dictionary) -> void:
     _try_refresh()
 
 
-func _on_net_command_applied(cmd: Dictionary, host_hash: int) -> void :
+func _on_net_command_applied(cmd: Dictionary, host_hash: int) -> void:
     if m == null:
         return
     _apply_command_with_visuals(cmd)
@@ -867,7 +864,7 @@ func _on_net_command_applied(cmd: Dictionary, host_hash: int) -> void :
     _try_refresh()
 
 
-func _on_net_lost() -> void :
+func _on_net_lost() -> void:
     opponent_left = true
     if m != null and not m.is_over() and not end_shown:
         _write_report()
@@ -876,7 +873,7 @@ func _on_net_lost() -> void :
             get_tree().quit()
 
 
-func _write_report() -> void :
+func _write_report() -> void:
     if report_path == "":
         return
     var xp := 0
@@ -891,8 +888,7 @@ func _write_report() -> void :
         f.close()
 
 
-
-func _on_turn_started(u: Unit) -> void :
+func _on_turn_started(u: Unit) -> void:
     _queue_visual_action(Callable(self, "_present_turn_started").bind(u))
 
 
@@ -904,7 +900,7 @@ func _present_turn_started(u: Unit) -> void:
     _follow(u)
 
 
-func _on_unit_moved(u: Unit, path: Array) -> void :
+func _on_unit_moved(u: Unit, path: Array) -> void:
     _queue_visual_action(Callable(self, "_present_unit_moved").bind(
             u, path.duplicate(), u.pos, u.facing))
 
@@ -1063,7 +1059,7 @@ func _finish_attack_animation(unit_id: int, action: String) -> void:
     _anim_done()
 
 
-func _on_unit_hurt(u: Unit, amount: int, reason: String) -> void :
+func _on_unit_hurt(u: Unit, amount: int, reason: String) -> void:
     _queue_visual_action(Callable(self, "_present_unit_hurt").bind(u, amount, reason, u.hp))
 
 
@@ -1090,7 +1086,7 @@ func _present_unit_hurt(u: Unit, amount: int, reason: String, hp_after_hit: int)
         _pause_visual_sequence(0.6)
 
 
-func _on_unit_died(u: Unit) -> void :
+func _on_unit_died(u: Unit) -> void:
     _dying_turn_snapshots[u.id] = u.dying_turns
     _queue_visual_action(Callable(self, "_present_unit_died").bind(u, u.dying_turns))
 
@@ -1156,8 +1152,7 @@ func _present_unit_expired(u: Unit) -> void:
     node.get_node("Over/Turns").visible = false
 
 
-
-func _on_xp_gained(u: Unit, job_xp: int, char_xp: int, flag: int) -> void :
+func _on_xp_gained(u: Unit, job_xp: int, char_xp: int, flag: int) -> void:
     _queue_visual_action(Callable(self, "_present_xp_gained").bind(u, job_xp, char_xp, flag))
 
 
@@ -1187,11 +1182,11 @@ func _present_xp_gained(u: Unit, job_xp: int, char_xp: int, flag: int) -> void:
         _pause_visual_sequence(1.0)
 
 
-func _on_match_over(_winner: int) -> void :
+func _on_match_over(_winner: int) -> void:
     pass
 
 
-func _anim_done() -> void :
+func _anim_done() -> void:
     busy = maxi(0, busy - 1)
     _drain_visual_queue()
 
@@ -1217,7 +1212,7 @@ func _pause_visual_sequence(duration: float) -> void:
     get_tree().create_timer(duration).timeout.connect(_anim_done)
 
 
-func _try_refresh() -> void :
+func _try_refresh() -> void:
     if busy > 0 or not _visual_queue.is_empty() or _collecting_visual_events or m == null:
         return
     _refresh()
@@ -1244,7 +1239,7 @@ func _refresh() -> void:
     var u := m.active
     var human := not _input_locked(u)
     var prompt := ""
-    if not m.pending_reaction.is_empty():   # movimento extra (esquiva com dano enorme): usar na hora ou cancelar
+    if not m.pending_reaction.is_empty(): # movimento extra (esquiva com dano enorme): usar na hora ou cancelar
         var o := m.pending_unit()
         if o != null and _owner_human(o):
             var saved := o.move_left
@@ -1301,7 +1296,7 @@ func _refresh() -> void:
         _auto_menu()
 
 
-func _add_marker(p: Vector2i, color: Color) -> void :
+func _add_marker(p: Vector2i, color: Color) -> void:
     var mi := MeshInstance3D.new()
     var box := BoxMesh.new()
     var marker_size := MapGeometry.TILE_SIZE * 0.9
@@ -1310,7 +1305,6 @@ func _add_marker(p: Vector2i, color: Color) -> void :
     mi.material_override = _mat(color, true)
     mi.position = MapGeometry.tile_pos(m.map, p) + Vector3(0, 0.03, 0)
     overlay_root.add_child(mi)
-
 
 
 func _add_label(p: Vector2i, text: String, color: Color, size: int, corner: float) -> Label3D:
@@ -1348,7 +1342,7 @@ func _job_name(u: Unit) -> String:
 func _job_level(u: Unit) -> int:
     var ch: Character = roster.by_id().get(u.character_id)
     return ch.job_level(rules, u.job_id) if ch != null else 1
-func _update_hud() -> void :
+func _update_hud() -> void:
     var u := m.active
     var col := (ALLY_COLOR if u.team == ally_team() else ENEMY_COLOR).lightened(0.2).to_html(false)
     var head := "[b][color=#%s]%s[/color][/b] %s\nNível %d · %s nv %d" % [col, u.display_name, _sex_icon(u.look), u.char_level, _job_name(u), u.job_level]
@@ -1376,7 +1370,7 @@ func _listed_before(items: Array, id: int) -> bool:
     return false
 
 
-func _show_end() -> void :
+func _show_end() -> void:
     if end_shown:
         return
     end_shown = true
@@ -1415,8 +1409,6 @@ func _show_end() -> void :
         get_tree().quit()
 
 
-
-
 func _mat(color: Color, translucent := false) -> StandardMaterial3D:
     var key := "%s_%s" % [color.to_html(true), translucent]
     if translucent and _mats.has(key):
@@ -1435,7 +1427,7 @@ func _mat(color: Color, translucent := false) -> StandardMaterial3D:
     return mat
 
 
-func _build_environment() -> void :
+func _build_environment() -> void:
     var env := Environment.new()
     env.background_mode = Environment.BG_COLOR
     env.background_color = Color(0.09, 0.1, 0.15)
@@ -1494,7 +1486,7 @@ func _build_environment() -> void :
     _update_camera()
 
 
-func _update_click_marker() -> void :
+func _update_click_marker() -> void:
     if m == null or selected_tile == Picking.NONE:
         click_marker.visible = false
         return
@@ -1502,7 +1494,7 @@ func _update_click_marker() -> void :
     click_marker.position = MapGeometry.tile_pos(m.map, selected_tile) + Vector3(0, 0.08, 0)
 
 
-func _clear_world() -> void :
+func _clear_world() -> void:
     _visual_generation += 1
     for root in [terrain_root, units_root, overlay_root, labels_root]:
         for c in root.get_children():
@@ -1539,7 +1531,7 @@ func _tile_color(p: Vector2i) -> Color:
     return c
 
 
-func _build_terrain() -> void :
+func _build_terrain() -> void:
     var map := m.map
     var batches := {}
     var colors := {}
@@ -1572,7 +1564,7 @@ func _build_terrain() -> void :
     var mi := MeshInstance3D.new()
     mi.mesh = mesh
     terrain_root.add_child(mi)
-func _build_units() -> void :
+func _build_units() -> void:
     for u in m.units:
         var n := Node3D.new()
         var model := CHARACTER_MODEL.create_model(TEAM_COLORS[u.team])
@@ -1659,13 +1651,12 @@ func _hp_sprite(color: Color, width_px: float, offset_x: float, height := 8, off
     return s
 
 
-
 func _action_remaining(u: Unit) -> float:
     var cost := m.turns.turn_cost(u.moved, u.acted) if u == m.active and (u.moved or u.acted) else 0
     return clampf(float(u.ct - cost) / float(m.turns.threshold), 0.0, 1.0)
 
 
-func _update_unit_visual(u: Unit) -> void :
+func _update_unit_visual(u: Unit) -> void:
     var n: Node3D = unit_nodes[u.id]
     var ally := u.team == ally_team()
     var col := ALLY_COLOR if ally else ENEMY_COLOR
@@ -1702,7 +1693,7 @@ func _update_unit_visual(u: Unit) -> void :
     turns.outline_modulate = col.darkened(0.15)
     turns.visible = u.is_alive()
 func _float_text(pos: Vector3, text: String, color: Color, font_size := 34,
-        duration := 1.0) -> void :
+        duration := 1.0) -> void:
     var l := Label3D.new()
     l.text = text
     l.modulate = color
@@ -1729,7 +1720,7 @@ func _pan_limit() -> Vector3:
     return Vector3(half, 0, half)
 
 
-func _update_camera() -> void :
+func _update_camera() -> void:
     camera_pivot.rotation_degrees = Vector3(pitch, yaw, 0)
     camera.position = Vector3(0, 0, distance)
 
@@ -1740,7 +1731,7 @@ func pick_at(screen_pos: Vector2) -> Vector2i:
     var o := camera.project_ray_origin(screen_pos)
     var d := camera.project_ray_normal(screen_pos)
     return Picking.pick_tile(m.map, o, d)
-func _process(delta: float) -> void :
+func _process(delta: float) -> void:
     _t += delta
     if m != null:
         _update_overheads()
@@ -1779,7 +1770,7 @@ func _process(delta: float) -> void :
         if cpu_wait >= 0.7:
             cpu_wait = 0.0
             step_cpu()
-    if auto_play and mode == Mode.ONLINE and m != null and not m.is_over() and busy == 0\
+    if auto_play and mode == Mode.ONLINE and m != null and not m.is_over() and busy == 0 \
 and not awaiting and _auto_actor_is_me():
         _command(SimpleBot.next_command(m, bot_rng))
     if quit_after_turns > 0 and m != null and m.turn_serial >= quit_after_turns:
@@ -1792,8 +1783,7 @@ and not awaiting and _auto_actor_is_me():
             get_tree().quit()
 
 
-
-func _update_overheads() -> void :
+func _update_overheads() -> void:
     var up := camera.global_transform.basis.y
     for id in unit_nodes:
         var n: Node3D = unit_nodes[id]
@@ -1806,7 +1796,7 @@ func _update_overheads() -> void :
         var pointer: Label3D = over.get_node("Pointer")
         if pointer.visible:
             pointer.offset.y = 62.0 + sin(_t * 5.0) * 7.0
-func _unhandled_input(event: InputEvent) -> void :
+func _unhandled_input(event: InputEvent) -> void:
     if m != null and m.awaiting_facing and screen == null and event is InputEventKey and event.pressed and not event.echo \
             and _owner_human(m.active) and not event.shift_pressed:
         var sd := Vector2.ZERO
@@ -1825,7 +1815,7 @@ func _unhandled_input(event: InputEvent) -> void :
         if sd != Vector2.ZERO:
             _command({"t": "face", "unit": m.active.id, "dir": _dir_from_screen(sd)})
             return
-    if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_ESCAPE\
+    if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_ESCAPE \
 and m == null and screen == null and net != null and not net.active:
         _show_menu()
         return
@@ -1869,7 +1859,7 @@ and m == null and screen == null and net != null and not net.active:
             cancel_all()
 
 
-func set_hover(p: Vector2i) -> void :
+func set_hover(p: Vector2i) -> void:
     hover = p
     if p == Picking.NONE or m == null:
         hover_marker.visible = false
@@ -1921,11 +1911,11 @@ func _client_may_act() -> bool:
 static func reaction_color(kind: String) -> Color:
     match kind:
         "dodge", "extra_move":
-            return Color(0.35, 0.9, 0.45)   # esquiva: verde
+            return Color(0.35, 0.9, 0.45) # esquiva: verde
         "parry":
-            return Color(1.0, 0.9, 0.3)     # parry: amarelo
+            return Color(1.0, 0.9, 0.3) # parry: amarelo
         "block", "fall":
-            return Color(0.65, 0.42, 0.2)   # bloqueio: marrom
+            return Color(0.65, 0.42, 0.2) # bloqueio: marrom
         "counter":
             return Color(1.0, 0.85, 0.35)
         "oa":
