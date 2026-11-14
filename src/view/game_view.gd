@@ -35,52 +35,14 @@ var overlay_root: Node3D
 var labels_root: Node3D
 var hover_marker: MeshInstance3D
 var click_marker: Node3D
-var camera_pivot: Node3D
-var camera: Camera3D
-var hud: Hud
-
-var unit_nodes := {}
-var _attack_animation_index := {}
-var _attack_animations := {}
-var _death_animation_started := {}
-var _dying_turn_snapshots := {}
-var _visual_generation := 0
-var move_tiles := {}
-var target_tiles := {}
-var hover := Picking.NONE
-var selected_tile := Picking.NONE
-var busy := 0
-var end_shown := false
-var last_rewards := {}
-var yaw := 30.0
-var pitch := -55.0
-var distance := 32.0
-var cpu_wait := 0.0
-var bot_rng := RandomNumberGenerator.new()
-var _mats := {}
-var _shot_path := ""
-var _shot_frames := 0
-var _autostart_mode := -1
-var _focus_arg := ""
-var _rc_start := Vector2.ZERO
-var _rc_dragged := false
-var preview := {}
-var _committing_unit := -1
-var attack_area := {}
-var menu_unit: Unit
-var reaction_tiles := {} # casas do movimento extra (reacao)
-var float_log: Array = [] # (testes) ultimos textos flutuantes
-var _prompt_hint := false
-var _cmd_queue: Array = []
-var _visual_queue: Array[Callable] = []
-var _collecting_visual_events := false
-var _follow_timer := 0.0
-var _t := 0.0
+var game_pause_controller: GamePauseController
+var game_camera_rig: GameCameraRig
+var game_visual_presenter: GameVisualPresenter
 
 
 var mode_pending := ""
 var menu_wanted := true
-var options_menu: Control
+var game_options_menu: Control
 var pending_confirm := Callable()
 var team_screen: TeamScreen
 
@@ -116,6 +78,20 @@ func _ready() -> void:
 	if not test_mode:
 		settings.apply_to_window()
 		_build_environment()
+
+	# --- Module Integration (Step 2) ---
+	# 1. Instantiate new controllers
+	game_pause_controller = GamePauseController.new()
+	add_child(game_pause_controller)
+
+		game_camera_rig = GameCameraRig.new()
+		game_camera_rig.game_view_ref = self # Pass reference back to the orchestrator
+		add_child(game_camera_rig)
+
+		game_visual_presenter = GameVisualPresenter.new()
+		add_child(game_visual_presenter)
+		# ---------------------------------
+
 	hud = Hud.new()
 	add_child(hud)
 	net = NetSession.new()
@@ -146,12 +122,13 @@ func _ready() -> void:
 	net.connection_failed.connect(func(): hud.show_message("Não conectou", "Não foi possível conectar. Confira o IP e se o anfitrião já está esperando."))
 	net.client_joined.connect(func(): hud.show_waiting("Adversário conectou", "Preparando a partida..."))
 
-	var pause_layer = CanvasLayer.new()
+
+	var game_visual_presenter: GameVisualPresenter = GameVisualPresenter.new()
 	pause_layer.layer = 100
 	add_child(pause_layer)
 
 	var pm = Control.new()
-	pm.set_script(load("res://src/view/options_menu.gd"))
+	pm.set_script(load("res://src/view/game_options_menu.gd"))
 	pm.name = "OptionsMenu"
 	pm.set_anchors_preset(Control.PRESET_CENTER)
 	pm.custom_minimum_size = Vector2(400, 300)
@@ -348,8 +325,8 @@ func setup_match(state: MatchState) -> void:
 	m.reaction_event.connect(_on_reaction_event)
 	m.manual_facing_teams = _manual_teams() # quem joga escolhe o lado ao fim do turno
 	m.xp_gained.connect(_on_xp_gained)
-	_build_terrain()
-	_build_units()
+	game_visual_presenter.build_terrain()
+	game_visual_presenter.build_units()
 	camera_pivot.position = Vector3.ZERO
 	distance = clampf(m.map.width * 1.3, 14.0, 60.0)
 	if _focus_arg != "":
@@ -1733,17 +1710,25 @@ func pick_at(screen_pos: Vector2) -> Vector2i:
 func _process(delta: float) -> void:
 	_t += delta
 	if m != null:
-		_update_overheads()
+		game_visual_presenter.update_overheads()
+
+	# Delegate camera processing to the new Rig
+	if camera_rig != null:
+		camera_rig._process(delta)
+
 	if test_mode:
 		return
+
 	var shift := Input.is_key_pressed(KEY_SHIFT)
 	var rot := 0.0
+
+	# Check for manual rotation input to potentially override rig's rotation/panning
 	if Input.is_key_pressed(KEY_Q):
 		rot += 1.0
 	if Input.is_key_pressed(KEY_E):
 		rot -= 1.0
-	if rot != 0.0:
-		yaw += rot * 90.0 * delta
+
+	# Check for manual movement input
 	var mv := Vector3.ZERO
 	if not shift:
 		if Input.is_key_pressed(KEY_W) or Input.is_key_pressed(KEY_UP):
@@ -1754,24 +1739,32 @@ func _process(delta: float) -> void:
 			mv.x -= 1
 		if Input.is_key_pressed(KEY_D) or Input.is_key_pressed(KEY_RIGHT):
 			mv.x += 1
-	if mv != Vector3.ZERO or rot != 0.0:
-		camera_pivot.position += mv.normalized().rotated(Vector3.UP, deg_to_rad(yaw)) * 16.0 * delta
-		camera_pivot.position = camera_pivot.position.clamp(_pan_limit() * -1.0, _pan_limit())
-		_update_camera()
-	if m != null and (shift or _follow_timer > 0.0):
-		_follow_timer = maxf(0.0, _follow_timer - delta)
-		camera_pivot.position = camera_pivot.position.lerp(_actor_center(), clampf(delta * 6.0, 0.0, 1.0))
-		_update_camera()
+
+	# Manual rotation and movement must now be routed through the rig
+	if rot != 0.0:
+		camera_rig.handle_rotation_input(rot * 90.0 * delta)
+
+	if mv != Vector3.ZERO:
+		camera_rig.handle_movement_input(mv)
+
+	# Check for follow/tracking logic
+	if m != null and (_follow_timer > 0.0 or Input.is_key_pressed(KEY_SPACE) or Input.is_key_pressed(KEY_ENTER)):
+		if camera_rig != null and m.active != null:
+			camera_rig.trigger_follow(m.active.position)
+
 	if m != null and hud.context_panel.visible and menu_unit != null and unit_nodes.has(menu_unit.id):
 		hud.move_context_menu(_menu_anchor(menu_unit), get_viewport().get_visible_rect().size)
+
 	if m != null and not m.is_over() and busy == 0 and (_cpu_controls(m.active) or _cpu_owns_reaction()):
 		cpu_wait += delta
 		if cpu_wait >= 0.7:
 			cpu_wait = 0.0
 			step_cpu()
+
 	if auto_play and mode == Mode.ONLINE and m != null and not m.is_over() and busy == 0 \
 and not awaiting and _auto_actor_is_me():
 		_command(SimpleBot.next_command(m, bot_rng))
+
 	if quit_after_turns > 0 and m != null and m.turn_serial >= quit_after_turns:
 		get_tree().quit()
 	if _shot_path != "":
@@ -1814,9 +1807,15 @@ func _unhandled_input(event: InputEvent) -> void:
 		if sd != Vector2.ZERO:
 			_command({"t": "face", "unit": m.active.id, "dir": _dir_from_screen(sd)})
 			return
-	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_ESCAPE \
-and m == null and screen == null and net != null and not net.active:
-		_show_menu()
+	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_ESCAPE:
+		if screen != null:
+			cancel_all()
+		elif m != null:
+			# Durante a partida, delega o controle de pausa e opções ao novo controlador
+			game_pause_controller.toggle_pause()
+		else:
+			# Se não houver tela e não houver partida ativa (Menu Principal), não faz nada
+			pass
 		return
 	if m == null or screen != null:
 		return
