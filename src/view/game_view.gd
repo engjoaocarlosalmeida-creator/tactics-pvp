@@ -7,8 +7,6 @@
 class_name MainGameView
 extends Node3D
 
-const GameVisualPresenter = preload("res://src/view/game_visual_presenter.gd")
-
 
 const CHARACTER_MODEL := preload("res://src/view/character_model.gd")
 const TEAM_COLORS: Array[Color] = [Color(0.25, 0.55, 1.0), Color(1.0, 0.35, 0.3)]
@@ -133,8 +131,11 @@ func _ready() -> void:
 	game_camera_rig = GameCameraRig.new()
 	game_camera_rig.game_view_ref = self # Pass reference back to the orchestrator
 	add_child(game_camera_rig)
+	camera_rig = game_camera_rig
+
 
 	game_visual_presenter = GameVisualPresenter.new()
+	game_visual_presenter.game_view_ref = self
 	add_child(game_visual_presenter)
 	# ---------------------------------
 
@@ -1786,9 +1787,10 @@ func _process(delta: float) -> void:
 		camera_rig.handle_movement_input(mv)
 
 	# Check for follow/tracking logic
-	if m != null and (_follow_timer > 0.0 or Input.is_key_pressed(KEY_SPACE) or Input.is_key_pressed(KEY_ENTER)):
+	if m != null and (Input.is_key_pressed(KEY_SPACE) or Input.is_key_pressed(KEY_ENTER)):
 		if camera_rig != null and m.active != null:
-			camera_rig.trigger_follow(m.active.position)
+			camera_rig.trigger_follow()
+
 
 	if m != null and hud.context_panel.visible and menu_unit != null and unit_nodes.has(menu_unit.id):
 		hud.move_context_menu(_menu_anchor(menu_unit), get_viewport().get_visible_rect().size)

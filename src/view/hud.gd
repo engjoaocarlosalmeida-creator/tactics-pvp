@@ -60,7 +60,7 @@ var ap_bar: HpBar
 var ap_text: Label
 
 
-func _ready() -> void :
+func _ready() -> void:
 	layer = 10
 	var root := Control.new()
 	root.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -191,15 +191,13 @@ func _ready() -> void :
 	_build_menu_extras(root)
 
 
-
-
-func _build_menu_extras(root: Control) -> void :
+func _build_menu_extras(root: Control) -> void:
 	account_panel = PanelContainer.new()
 	account_panel.visible = false
 	account_panel.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 	root.add_child(account_panel)
 	account_panel.set_anchors_and_offsets_preset(Control.PRESET_TOP_LEFT, Control.PRESET_MODE_MINSIZE, 12)
-	account_panel.gui_input.connect( func(ev):
+	account_panel.gui_input.connect(func(ev):
 		if ev is InputEventMouseButton and ev.pressed and ev.button_index == MOUSE_BUTTON_LEFT:
 			account_requested.emit())
 	wiki_button = TextureButton.new()
@@ -211,7 +209,7 @@ func _build_menu_extras(root: Control) -> void :
 	wiki_button.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	wiki_button.tooltip_text = "Wiki: regras e mecânicas"
 	wiki_button.visible = false
-	wiki_button.pressed.connect( func(): wiki_requested.emit())
+	wiki_button.pressed.connect(func(): wiki_requested.emit())
 	root.add_child(wiki_button)
 	wiki_button.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT, Control.PRESET_MODE_MINSIZE, 14)
 	wiki_button.grow_horizontal = Control.GROW_DIRECTION_BEGIN
@@ -246,13 +244,13 @@ func _build_menu_extras(root: Control) -> void :
 		b.tooltip_text = spec[1]
 		var label_text: String = spec[1]
 		var sig: Signal = spec[3]
-		b.mouse_entered.connect( func():
+		b.mouse_entered.connect(func():
 			menu_icon_label.text = label_text
 			b.modulate = Color(1.3, 1.2, 0.8))
-		b.mouse_exited.connect( func():
+		b.mouse_exited.connect(func():
 			menu_icon_label.text = ""
 			b.modulate = Color.WHITE)
-		b.pressed.connect( func(): sig.emit())
+		b.pressed.connect(func(): sig.emit())
 		menu_icons.add_child(b)
 	splash = Control.new()
 	splash.visible = false
@@ -282,8 +280,7 @@ func _build_menu_extras(root: Control) -> void :
 	tw.tween_property(press, "modulate:a", 1.0, 0.9)
 
 
-
-func set_account(acc: Account) -> void :
+func set_account(acc: Account) -> void:
 	for c in account_panel.get_children():
 		account_panel.remove_child(c)
 		c.queue_free()
@@ -318,7 +315,7 @@ func set_account(acc: Account) -> void :
 	account_panel.add_child(row)
 
 
-func _set_menu_chrome(on: bool) -> void :
+func _set_menu_chrome(on: bool) -> void:
 	account_panel.visible = on
 	wiki_button.visible = on
 	menu_icons.get_parent().visible = on
@@ -326,9 +323,9 @@ func _set_menu_chrome(on: bool) -> void :
 		menu_icon_label.text = ""
 
 
-func _input(event: InputEvent) -> void :
+func _input(event: InputEvent) -> void:
 	if splash != null and splash.visible:
-		var press: bool = (event is InputEventKey and event.pressed and not event.echo)\
+		var press: bool = (event is InputEventKey and event.pressed and not event.echo) \
 or (event is InputEventMouseButton and event.pressed) or (event is InputEventJoypadButton and event.pressed)
 		if press:
 			pass
@@ -370,7 +367,7 @@ func _rich(width: int) -> RichTextLabel:
 	return l
 
 
-func _clear(box: Control) -> void :
+func _clear(box: Control) -> void:
 	for c in box.get_children():
 		box.remove_child(c)
 		c.queue_free()
@@ -385,24 +382,22 @@ func _button(text: String, cb: Callable, focusable := true) -> Button:
 	return b
 
 
-
-func _focus_first() -> void :
+func _focus_first() -> void:
 	for b in overlay_box.find_children("*", "Button", true, false):
 		if not (b as Button).disabled:
 			(b as Button).grab_focus()
 			return
 
 
-func _place(panel: Control, want: Vector2, view_size: Vector2) -> void :
+func _place(panel: Control, want: Vector2, view_size: Vector2) -> void:
 	panel.reset_size()
 	var sz := panel.get_combined_minimum_size()
-	panel.position = Vector2(clampf(want.x, 4.0, maxf(4.0, view_size.x - sz.x - 4.0)), 
+	panel.position = Vector2(clampf(want.x, 4.0, maxf(4.0, view_size.x - sz.x - 4.0)),
 			clampf(want.y, 4.0, maxf(4.0, view_size.y - sz.y - 4.0)))
 	panel.visible = true
 
 
-
-func show_game_hud(on: bool) -> void :
+func show_game_hud(on: bool) -> void:
 	_game_on = on
 	if on:
 		menu_bg.visible = false
@@ -413,10 +408,8 @@ func show_game_hud(on: bool) -> void :
 	_order_window.visible = on and order_box.get_child_count() > 0
 
 
-
-
-func set_unit_info(head_bbcode: String, hp: int, max_hp: int, stats_bbcode: String, face: Texture2D, 
-		hp_color := Color(0, 0, 0, 0), mp := 0, max_mp := 0) -> void :
+func set_unit_info(head_bbcode: String, hp: int, max_hp: int, stats_bbcode: String, face: Texture2D,
+		hp_color := Color(0, 0, 0, 0), mp := 0, max_mp := 0) -> void:
 	info_head.text = head_bbcode
 	hp_bar.fill_color = hp_color
 	hp_bar.ratio = float(hp) / maxf(1.0, float(max_hp))
@@ -428,14 +421,13 @@ func set_unit_info(head_bbcode: String, hp: int, max_hp: int, stats_bbcode: Stri
 	portrait_slot.visible = face != null
 
 
-
-func set_action_bar(remaining: float, spent: float) -> void :
+func set_action_bar(remaining: float, spent: float) -> void:
 	ap_bar.ratio = remaining
 	ap_bar.ghost = spent
 	ap_text.text = "Ação %d%%" % int(round(remaining * 100.0)) + (("  (gastou %d%%)" % int(round(spent * 100.0))) if spent > 0.0 else "")
 
 
-func clear_unit_info() -> void :
+func clear_unit_info() -> void:
 	info_head.text = ""
 	info_label.text = ""
 	hp_text.text = ""
@@ -449,8 +441,7 @@ func clear_unit_info() -> void :
 	portrait_slot.visible = false
 
 
-
-func set_order_items(items: Array) -> void :
+func set_order_items(items: Array) -> void:
 	_clear(order_box)
 	_order_window.visible = _game_on and not items.is_empty()
 	for it in items:
@@ -471,7 +462,7 @@ func set_order_items(items: Array) -> void :
 		face.set_anchors_preset(Control.PRESET_FULL_RECT)
 		face.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		holder.add_child(face)
-		var team_color: Color = GameView.TEAM_COLORS[int(it["team"])]
+		var team_color: Color = MainGameView.TEAM_COLORS[int(it["team"])]
 		var bar := ColorRect.new()
 		bar.color = team_color
 		bar.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
@@ -494,7 +485,7 @@ func set_order_items(items: Array) -> void :
 			slot.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 			slot.tooltip_text = "Alternar para este personagem"
 			var uid := int(it["id"])
-			slot.gui_input.connect( func(ev):
+			slot.gui_input.connect(func(ev):
 				if ev is InputEventMouseButton and ev.pressed and ev.button_index == MOUSE_BUTTON_LEFT:
 					order_clicked.emit(uid))
 			var glow := ColorRect.new()
@@ -506,24 +497,22 @@ func set_order_items(items: Array) -> void :
 		order_box.add_child(slot)
 
 
-func set_hint(text: String) -> void :
+func set_hint(text: String) -> void:
 	hint_label.text = text
 	hint_panel.visible = _game_on and text != ""
 	hint_panel.reset_size()
 
 
-func add_log(line: String) -> void :
+func add_log(line: String) -> void:
 	_log_lines.append(line)
 	while _log_lines.size() > 6:
 		_log_lines.pop_front()
 	log_label.text = "\n".join(_log_lines)
 
 
-func clear_log() -> void :
+func clear_log() -> void:
 	_log_lines.clear()
 	log_label.text = ""
-
-
 
 
 func _header(title: String, face: Texture2D, sex := "", small := false) -> HBoxContainer:
@@ -545,8 +534,7 @@ func _header(title: String, face: Texture2D, sex := "", small := false) -> HBoxC
 	return head
 
 
-
-func show_context_menu(title: String, items: Array, screen_pos: Vector2, view_size: Vector2, _face: Texture2D = null) -> void :
+func show_context_menu(title: String, items: Array, screen_pos: Vector2, view_size: Vector2, _face: Texture2D = null) -> void:
 	hide_context_menu()
 	context_panel.draggable = false
 	context_panel.add_theme_stylebox_override("panel", UITheme.small_window())
@@ -562,29 +550,27 @@ func show_context_menu(title: String, items: Array, screen_pos: Vector2, view_si
 		b.custom_minimum_size = Vector2(96, 0)
 		UITheme.compact(b, 2)
 		var id := str(it["id"])
-		b.pressed.connect( func(): menu_item_chosen.emit(id))
+		b.pressed.connect(func(): menu_item_chosen.emit(id))
 		context_box.add_child(b)
 		context_ids.append(id)
 	_place(context_panel, screen_pos, view_size)
 
 
-
-func move_context_menu(screen_pos: Vector2, view_size: Vector2) -> void :
+func move_context_menu(screen_pos: Vector2, view_size: Vector2) -> void:
 	if not context_panel.visible:
 		return
 	var sz := context_panel.size
-	context_panel.position = Vector2(clampf(screen_pos.x, 2.0, maxf(2.0, view_size.x - sz.x - 2.0)), 
+	context_panel.position = Vector2(clampf(screen_pos.x, 2.0, maxf(2.0, view_size.x - sz.x - 2.0)),
 			clampf(screen_pos.y, 2.0, maxf(2.0, view_size.y - sz.y - 2.0)))
 
 
-func hide_context_menu() -> void :
+func hide_context_menu() -> void:
 	_clear(context_box)
 	context_ids.clear()
 	context_panel.visible = false
 
 
-
-func show_target_window(data: Dictionary, actions: Array, view_size: Vector2) -> void :
+func show_target_window(data: Dictionary, actions: Array, view_size: Vector2) -> void:
 	hide_target_window()
 	target_box.add_child(_header(str(data["title"]), null, str(data.get("sex", ""))))
 	var row := HBoxContainer.new()
@@ -628,23 +614,23 @@ func show_target_window(data: Dictionary, actions: Array, view_size: Vector2) ->
 		b.disabled = not bool(it["enabled"])
 		b.focus_mode = Control.FOCUS_NONE
 		var id := str(it["id"])
-		b.pressed.connect( func(): menu_item_chosen.emit(id))
+		b.pressed.connect(func(): menu_item_chosen.emit(id))
 		target_box.add_child(b)
 		context_ids.append(id)
 	_place(target_panel, Vector2(view_size.x * 0.5 - 40.0, 90.0), view_size)
 
 
-func hide_target_window() -> void :
+func hide_target_window() -> void:
 	_clear(target_box)
 	target_panel.visible = false
 
 
-func show_confirm(text_bbcode: String, view_size: Vector2) -> void :
+func show_confirm(text_bbcode: String, view_size: Vector2) -> void:
 	confirm_label.text = text_bbcode
 	_place(confirm_panel, Vector2(view_size.x * 0.5 - 190.0, view_size.y * 0.5 - 90.0), view_size)
 
 
-func hide_confirm() -> void :
+func hide_confirm() -> void:
 	confirm_panel.visible = false
 
 
@@ -652,8 +638,7 @@ func confirm_visible() -> bool:
 	return confirm_panel.visible
 
 
-
-func show_items_window(title: String, summary: String, rows: Array, view_size: Vector2, face: Texture2D = null) -> void :
+func show_items_window(title: String, summary: String, rows: Array, view_size: Vector2, face: Texture2D = null) -> void:
 	hide_items_window()
 	items_box.add_child(_header(title, face))
 	var s := _rich(300)
@@ -683,7 +668,7 @@ func show_items_window(title: String, summary: String, rows: Array, view_size: V
 	_place(items_panel, Vector2(view_size.x * 0.5 - 160.0, 120.0), view_size)
 
 
-func hide_items_window() -> void :
+func hide_items_window() -> void:
 	_clear(items_box)
 	items_panel.visible = false
 
@@ -692,28 +677,25 @@ func any_popup_visible() -> bool:
 	return context_panel.visible or target_panel.visible or confirm_panel.visible or items_panel.visible
 
 
-func hide_popups() -> void :
+func hide_popups() -> void:
 	hide_context_menu()
 	hide_target_window()
 	hide_confirm()
 	hide_items_window()
 
 
-
-
-func _clear_overlay() -> void :
+func _clear_overlay() -> void:
 	_clear(overlay_box)
 	overlay.remove_theme_stylebox_override("panel")
 	_set_menu_chrome(false)
-func show_splash() -> void :
+func show_splash() -> void:
 	_clear_overlay()
 	overlay.visible = false
 	menu_bg.visible = true
 	splash.visible = true
 
 
-
-func show_menu() -> void :
+func show_menu() -> void:
 	_clear_overlay()
 	splash.visible = false
 	menu_bg.visible = true
@@ -727,12 +709,12 @@ func show_menu() -> void :
 	overlay.add_theme_stylebox_override("panel", sb)
 	overlay_box.custom_minimum_size = Vector2(420, 0)
 	var entries := [
-		["2 jogadores (mesmo PC)", func(): menu_choice.emit(GameView.Mode.LOCAL)], 
-		["Jogar contra o computador", func(): menu_choice.emit(GameView.Mode.VS_CPU)], 
-		["Computador x computador", func(): menu_choice.emit(GameView.Mode.DEMO)], 
-		["Jogar online", show_online_menu], 
-		["Opções", func(): options_requested.emit()], 
-		["Sair", func(): quit_pressed.emit()], 
+		["2 jogadores (mesmo PC)", func(): menu_choice.emit(MainGameView.Mode.LOCAL)],
+		["Jogar contra o computador", func(): menu_choice.emit(MainGameView.Mode.VS_CPU)],
+		["Computador x computador", func(): menu_choice.emit(MainGameView.Mode.DEMO)],
+		["Jogar online", show_online_menu],
+		["Opções", func(): options_requested.emit()],
+		["Sair", func(): quit_pressed.emit()],
 	]
 	for e in entries:
 		var b := UITheme.menu_text(str(e[0]), 26)
@@ -743,8 +725,7 @@ func show_menu() -> void :
 	_focus_first.call_deferred()
 
 
-
-func show_options(values: Dictionary) -> void :
+func show_options(values: Dictionary) -> void:
 	_clear_overlay()
 	menu_bg.visible = not _game_on
 	overlay_box.add_child(UITheme.title("OPÇÕES", 30))
@@ -772,7 +753,7 @@ func show_options(values: Dictionary) -> void :
 	_focus_first.call_deferred()
 
 
-func show_online_menu() -> void :
+func show_online_menu() -> void:
 	_clear_overlay()
 	menu_bg.visible = not _game_on
 	overlay_box.add_child(UITheme.title("JOGAR ONLINE", 28))
@@ -789,7 +770,7 @@ func show_online_menu() -> void :
 	_focus_first.call_deferred()
 
 
-func show_waiting(title: String, bbcode: String) -> void :
+func show_waiting(title: String, bbcode: String) -> void:
 	_clear_overlay()
 	menu_bg.visible = not _game_on
 	overlay_box.add_child(UITheme.title(title.to_upper(), 24))
@@ -800,7 +781,7 @@ func show_waiting(title: String, bbcode: String) -> void :
 	overlay.visible = true
 
 
-func show_message(title: String, bbcode: String) -> void :
+func show_message(title: String, bbcode: String) -> void:
 	_clear_overlay()
 	menu_bg.visible = not _game_on
 	overlay_box.add_child(UITheme.title(title.to_upper(), 24))
@@ -811,7 +792,7 @@ func show_message(title: String, bbcode: String) -> void :
 	overlay.visible = true
 
 
-func show_end(title: String, bbcode: String) -> void :
+func show_end(title: String, bbcode: String) -> void:
 	_clear_overlay()
 	menu_bg.visible = false
 	overlay_box.add_child(UITheme.title(title.to_upper(), 28))
@@ -823,6 +804,6 @@ func show_end(title: String, bbcode: String) -> void :
 	overlay.visible = true
 
 
-func hide_overlay() -> void :
+func hide_overlay() -> void:
 	overlay.visible = false
 	menu_bg.visible = false

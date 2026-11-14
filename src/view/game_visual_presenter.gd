@@ -85,7 +85,7 @@ func _ready():
 
 		n.add_child(over)
 		n.position = MapGeometry.tile_pos(game_view_ref.m.map, u.pos)
-		units_root.add_child(n)
+		game_view_ref.units_root.add_child(n)
 		game_view_ref.unit_nodes[u.id] = n
 		game_view_ref._update_unit_facing(u)
 		_update_unit_visual(u)
@@ -204,3 +204,122 @@ func _present_reaction_event(u: Unit, kind: String, text: String) -> void:
 		float_log.pop_front()
 	if game_view_ref.animate:
 		game_view_ref._pause_visual_sequence(1.0)
+
+func build_units() -> void:
+	for u in game_view_ref.m.units:
+		var n := Node3D.new()
+		var model := CHARACTER_MODEL.create_model(TEAM_COLORS[u.team])
+		if model == null:
+			continue
+		CHARACTER_MODEL.set_facing(model, u.facing)
+		var animation_player := CHARACTER_MODEL.animation_player(model)
+		animation_player.animation_finished.connect(_on_unit_animation_finished.bind(u.id))
+		n.add_child(model)
+		var ring := MeshInstance3D.new()
+		ring.name = "Ring"
+		var torus := TorusMesh.new()
+		torus.inner_radius = 0.4
+		torus.outer_radius = 0.5
+		ring.mesh = torus
+		var rmat := StandardMaterial3D.new()
+		rmat.albedo_color = Color(1, 0.9, 0.2)
+		rmat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		ring.material_override = rmat
+		ring.position.y = 0.06
+		ring.visible = false
+		n.add_child(ring)
+		var over := Node3D.new()
+		over.name = "Over"
+		var back := _hp_sprite(Color(0.03, 0.04, 0.1, 0.95), 82.0, -41.0)
+		back.name = "HpBack"
+		over.add_child(back)
+		var fill := _hp_sprite(ALLY_COLOR, 80.0, -40.0)
+		fill.name = "HpFill"
+		fill.render_priority = 1
+		over.add_child(fill)
+		var ap_back := _hp_sprite(Color(0.03, 0.04, 0.1, 0.9), 82.0, -41.0, 6, -10.0)
+		ap_back.name = "ApBack"
+		over.add_child(ap_back)
+		var ap_fill := _hp_sprite(Color(1.0, 0.82, 0.25), 80.0, -40.0, 4, -10.0)
+		ap_fill.name = "ApFill"
+		ap_fill.render_priority = 1
+		over.add_child(ap_fill)
+		var turns := Label3D.new()
+		turns.name = "Turns"
+		turns.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+		turns.font = UITheme.bold_font
+		turns.font_size = 44
+		turns.pixel_size = 0.0065
+		turns.outline_size = 12
+		turns.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+		turns.offset = Vector2(-72, -4)
+		turns.no_depth_test = true
+		over.add_child(turns)
+		var pointer := Label3D.new()
+		pointer.name = "Pointer"
+		pointer.text = "▼"
+		pointer.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+		pointer.font = UITheme.bold_font
+		pointer.font_size = 64
+		pointer.pixel_size = 0.0075
+		pointer.modulate = Color(1.0, 0.86, 0.25)
+		pointer.outline_size = 12
+		pointer.offset = Vector2(0, 62)
+		pointer.no_depth_test = true
+		pointer.visible = false
+		over.add_child(pointer)
+		n.add_child(over)
+		n.position = MapGeometry.tile_pos(game_view_ref.m.map, u.pos)
+		game_view_ref.units_root.add_child(n)
+		game_view_ref.unit_nodes[u.id] = n
+		game_view_ref._update_unit_facing(u)
+		_update_unit_visual(u)
+
+func build_terrain() -> void:
+	var map: BattleMap = game_view_ref.m.map
+	var batches := {}
+	var colors := {}
+	for z in map.depth:
+		for x in map.width:
+			var p := Vector2i(x, z)
+			var color := _tile_color(p)
+			var key := color.to_html(false)
+			if not batches.has(key):
+				var new_batch := SurfaceTool.new()
+				new_batch.begin(Mesh.PRIMITIVE_TRIANGLES)
+				batches[key] = new_batch
+				colors[key] = color
+			var c := MapGeometry.center_xz(map, p)
+			var batch_surface: SurfaceTool = batches[key]
+			if map.kind_at(p) == BattleMap.Kind.SLIPPERY and map.slope_dir(p) != Vector2i.ZERO:
+				batch_surface.append_from(MapGeometry.slope_mesh(map, p), 0, Transform3D(Basis.IDENTITY, Vector3(c.x, 0, c.y)))
+			else:
+				var top := MapGeometry.column_top(map, p)
+				var box := BoxMesh.new()
+				box.size = Vector3(MapGeometry.TILE_SIZE, top, MapGeometry.TILE_SIZE)
+				batch_surface.append_from(box, 0, Transform3D(Basis.IDENTITY, Vector3(c.x, top / 2.0, c.y)))
+	var mesh := ArrayMesh.new()
+	for key in batches:
+		var completed_batch: SurfaceTool = batches[key]
+		completed_batch.commit(mesh)
+		var mat: StandardMaterial3D = game_view_ref._mat(colors[key])
+		mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+		mesh.surface_set_material(mesh.get_surface_count() - 1, mat)
+	var mi := MeshInstance3D.new()
+	mi.mesh = mesh
+	game_view_ref.terrain_root.add_child(mi)
+
+
+func update_overheads() -> void:
+	var up: Vector3 = game_view_ref.camera.global_transform.basis.y
+	for id in game_view_ref.unit_nodes:
+		var n: Node3D = game_view_ref.unit_nodes[id]
+		var over: Node3D = n.get_node("Over")
+		var u = game_view_ref.m.unit_by_id(int(id))
+		if u != null and u.is_dying():
+			over.global_position = n.global_position + Vector3(0, 0.35, 0)
+		else:
+			over.global_position = n.global_position + Vector3(0, SPRITE_H * 0.5, 0) + up * (SPRITE_H * 0.5 + 0.14)
+		var pointer: Label3D = over.get_node("Pointer")
+		if pointer.visible:
+			pointer.offset.y = 62.0 + sin(game_view_ref._t * 5.0) * 7.0
