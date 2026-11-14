@@ -7,8 +7,8 @@
 class_name MainGameView
 extends Node3D
 
+const GameVisualPresenter = preload("res://src/view/game_visual_presenter.gd")
 
-enum Mode {LOCAL, VS_CPU, DEMO, ONLINE}
 
 const CHARACTER_MODEL := preload("res://src/view/character_model.gd")
 const TEAM_COLORS: Array[Color] = [Color(0.25, 0.55, 1.0), Color(1.0, 0.35, 0.3)]
@@ -26,6 +26,8 @@ var rules: Rules
 var catalog: JobCatalog
 var roster: Roster
 var m: MatchState
+enum Mode {LOCAL, VS_CPU, DEMO, ONLINE}
+
 var mode: int = Mode.LOCAL
 var match_seed: int = 1
 
@@ -39,8 +41,9 @@ var game_pause_controller: GamePauseController
 var game_camera_rig: GameCameraRig
 var game_visual_presenter: GameVisualPresenter
 
-
+var hud: Hud
 var mode_pending := ""
+
 var menu_wanted := true
 var game_options_menu: Control
 var pending_confirm := Callable()
@@ -62,6 +65,49 @@ var settings: Settings
 var account: Account
 var account_path := Account.PATH
 
+var camera_pivot: Node3D
+var camera: Camera3D
+var camera_rig: GameCameraRig
+var yaw := 45.0
+var pitch := -38.0
+var distance := 20.0
+var _follow_timer := 0.0
+var _rc_start := Vector2.ZERO
+var _rc_dragged := false
+var hover := Picking.NONE
+var selected_tile := Picking.NONE
+var _focus_arg := ""
+
+var unit_nodes := {}
+var move_tiles := {}
+var target_tiles := {}
+var attack_area := {}
+var reaction_tiles := {}
+var menu_unit: Unit
+var preview := {}
+var _committing_unit := -1
+
+var busy := 0
+var _t := 0.0
+var _visual_generation := 0
+var _visual_queue: Array[Callable] = []
+var _collecting_visual_events := false
+var _attack_animation_index := {}
+var _attack_animations := {}
+var _death_animation_started := {}
+var _dying_turn_snapshots := {}
+var float_log: Array = []
+
+var bot_rng := RandomNumberGenerator.new()
+var cpu_wait := 0.0
+var end_shown := false
+var last_rewards := {}
+var _cmd_queue: Array = []
+var _mats := {}
+var _prompt_hint := false
+var _shot_path := ""
+var _shot_frames := 0
+var _autostart_mode := -1
 
 func _ready() -> void:
 	rules = Rules.load_default()
@@ -84,13 +130,13 @@ func _ready() -> void:
 	game_pause_controller = GamePauseController.new()
 	add_child(game_pause_controller)
 
-		game_camera_rig = GameCameraRig.new()
-		game_camera_rig.game_view_ref = self # Pass reference back to the orchestrator
-		add_child(game_camera_rig)
+	game_camera_rig = GameCameraRig.new()
+	game_camera_rig.game_view_ref = self # Pass reference back to the orchestrator
+	add_child(game_camera_rig)
 
-		game_visual_presenter = GameVisualPresenter.new()
-		add_child(game_visual_presenter)
-		# ---------------------------------
+	game_visual_presenter = GameVisualPresenter.new()
+	add_child(game_visual_presenter)
+	# ---------------------------------
 
 	hud = Hud.new()
 	add_child(hud)
@@ -123,17 +169,9 @@ func _ready() -> void:
 	net.client_joined.connect(func(): hud.show_waiting("Adversário conectou", "Preparando a partida..."))
 
 
-	var game_visual_presenter: GameVisualPresenter = GameVisualPresenter.new()
-	pause_layer.layer = 100
-	add_child(pause_layer)
-
-	var pm = Control.new()
-	pm.set_script(load("res://src/view/game_options_menu.gd"))
-	pm.name = "OptionsMenu"
-	pm.set_anchors_preset(Control.PRESET_CENTER)
-	pm.custom_minimum_size = Vector2(400, 300)
-	pm.visible = false
-	pause_layer.add_child(pm)
+	# Note: pause_layer is managed by GamePauseController
+	# The logic below was moved to game_pause_controller.gd
+	# If we need to access it here, we use game_pause_controller.pause_layer
 
 
 	if test_mode:
