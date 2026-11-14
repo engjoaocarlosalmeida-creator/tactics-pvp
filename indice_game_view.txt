@@ -1,0 +1,132 @@
+ 110: func _ready() -> void:
+ 229: func open_screen(kind: String) -> void:
+ 262: func _open_from_screen(kind: String, char_index: int) -> void:
+ 268: func close_screen() -> void:
+ 276: func open_team_screen() -> void:
+ 280: func close_team_screen() -> void:
+ 282: func _save_roster() -> void:
+ 288: func _save_account() -> void:
+ 291: func _show_menu(with_splash := false) -> void:
+ 309: func _options_values() -> Dictionary:
+ 314: func _show_options() -> void:
+ 318: func _on_option_changed(key: String, delta: int) -> void:
+ 327: func _restart() -> void:
+ 334: func start_match(new_mode: int, seed_value: int = -1) -> void:
+ 346: func setup_match(state: MatchState) -> void:
+ 379: func ally_team() -> int:
+ 383: func _sex_icon(sex: String) -> String:
+ 387: func _follow(_u: Unit) -> void:
+ 391: func _actor_center() -> Vector3:
+ 398: func _cycle_actor(dir: int) -> void:
+ 413: func _cpu_controls(u: Unit) -> bool:
+ 417: func _input_locked(u: Unit) -> bool:
+ 421: func _player_name(team: int) -> String:
+ 429: func step_cpu() -> void:
+ 439: func _apply_command_with_visuals(cmd: Dictionary) -> Dictionary:
+ 447: func _command(cmd: Dictionary) -> bool:
+ 465: func _human_turn() -> bool:
+ 469: func _unit_at(p: Vector2i) -> Unit:
+ 476: func _item(id: String, label: String, enabled: bool, icon := "") -> Dictionary:
+ 481: func _unit_menu_items() -> Array:
+ 494: func open_unit_menu() -> void:
+ 503: func _menu_anchor(u: Unit) -> Vector2:
+ 506: func _auto_menu() -> void:
+ 512: func click_tile(p: Vector2i, _screen_pos: Vector2 = Vector2(40, 40)) -> bool:
+ 561: func _preview_move(p: Vector2i) -> void:
+ 574: func _commit_preview() -> void:
+ 585: func _cancel_preview() -> void:
+ 596: func _approach_tile(u: Unit, t: Unit) -> Vector2i:
+ 611: func _do_attack_approach(t: Unit) -> void:
+ 621: func _run_commands(cmds: Array) -> bool:
+ 635: func _move_text(u: Unit, p: Vector2i) -> String:
+ 643: func _attack_text(u: Unit, t: Unit) -> String:
+ 647: func _ask_confirm(text: String, action: Callable) -> void:
+ 654: func confirm_accept() -> void:
+ 663: func confirm_reject() -> void:
+ 672: func _do_move(p: Vector2i) -> void:
+ 676: func _do_attack(t: Unit) -> void:
+ 678: func _open_target_window(t: Unit) -> void:
+ 703: func _choose_base(id: String) -> bool:
+ 758: func _ask_switch(to_id: int) -> bool:
+ 768: func _on_order_clicked(unit_id: int) -> void:
+ 773: func _open_items_window(u: Unit) -> void:
+ 782: func cancel_all() -> void:
+ 805: func wait() -> void:
+ 810: func _start_host(port: int) -> void:
+ 820: func _start_join(address: String, port: int) -> void:
+ 829: func _my_team_dicts() -> Array:
+ 836: func _on_net_setup(seed_value: int, t0: Array, t1: Array) -> void:
+ 853: func _on_net_command_from_client(cmd: Dictionary) -> void:
+ 866: func _on_net_command_applied(cmd: Dictionary, host_hash: int) -> void:
+ 882: func _on_net_lost() -> void:
+ 891: func _write_report() -> void:
+ 906: func _on_turn_started(u: Unit) -> void:
+ 910: func _present_turn_started(u: Unit) -> void:
+ 918: func _on_unit_moved(u: Unit, path: Array) -> void:
+ 923: func _present_unit_moved(u: Unit, path: Array, destination: Vector2i, facing: Vector2i) -> void:
+ 934: func _animate_unit_path(u: Unit, path: Array, on_finished := Callable()) -> void:
+ 962: func _face_unit_for_step(unit_id: int, direction: Vector2i) -> void:
+ 967: func _play_unit_animation(unit_id: int, action: String, duration: float) -> void:
+ 975: func _finish_unit_movement(unit_id: int) -> void:
+ 980: func _on_attack_resolved(attacker: Unit, _target: Unit, _tile: Vector2i, _damage: int) -> void:
+ 986: func _present_attack_resolved(attacker: Unit, facing: Vector2i, target: Unit = null,
+1014: func _present_attack_impact(target: Unit, damage: int, hp_before_hit: int,
+1040: func _start_death_animation(u: Unit, turns_left: int) -> void:
+1059: func _anim_done_for_generation(generation: int) -> void:
+1064: func _on_unit_animation_finished(animation_name: StringName, unit_id: int) -> void:
+1068: func _finish_attack_animation(unit_id: int, action: String) -> void:
+1077: func _on_unit_hurt(u: Unit, amount: int, reason: String) -> void:
+1081: func _present_unit_hurt(u: Unit, amount: int, reason: String, hp_after_hit: int) -> void:
+1104: func _on_unit_died(u: Unit) -> void:
+1109: func _present_unit_died(u: Unit, turns_left: int) -> void:
+1119: func _on_unit_dying_turn(u: Unit, turns_left: int) -> void:
+1123: func _present_unit_dying_turn(u: Unit, turns_left: int) -> void:
+1135: func _show_dying_status(u: Unit, turns_left: int) -> void:
+1150: func _on_unit_expired(u: Unit) -> void:
+1154: func _present_unit_expired(u: Unit) -> void:
+1170: func _on_xp_gained(u: Unit, job_xp: int, char_xp: int, flag: int) -> void:
+1174: func _present_xp_gained(u: Unit, job_xp: int, char_xp: int, flag: int) -> void:
+1200: func _on_match_over(_winner: int) -> void:
+1204: func _anim_done() -> void:
+1209: func _queue_visual_action(action: Callable) -> void:
+1215: func _drain_visual_queue() -> void:
+1225: func _pause_visual_sequence(duration: float) -> void:
+1230: func _try_refresh() -> void:
+1234: func _refresh() -> void:
+1314: func _add_marker(p: Vector2i, color: Color) -> void:
+1325: func _add_label(p: Vector2i, text: String, color: Color, size: int, corner: float) -> Label3D:
+1345: func _label_free_heights() -> int:
+1353: func _job_name(u: Unit) -> String:
+1357: func _job_level(u: Unit) -> int:
+1360: func _update_hud() -> void:
+1381: func _listed_before(items: Array, id: int) -> bool:
+1388: func _show_end() -> void:
+1427: func _mat(color: Color, translucent := false) -> StandardMaterial3D:
+1445: func _build_environment() -> void:
+1504: func _update_click_marker() -> void:
+1512: func _clear_world() -> void:
+1533: func _tile_color(p: Vector2i) -> Color:
+1549: func _build_terrain() -> void:
+1582: func _build_units() -> void:
+1652: func _hp_sprite(color: Color, width_px: float, offset_x: float, height := 8, off_y := 0.0) -> Sprite3D:
+1669: func _action_remaining(u: Unit) -> float:
+1674: func _update_unit_visual(u: Unit) -> void:
+1710: func _float_text(pos: Vector3, text: String, color: Color, font_size := 34,
+1733: func _pan_limit() -> Vector3:
+1738: func _update_camera() -> void:
+1743: func pick_at(screen_pos: Vector2) -> Vector2i:
+1749: func _process(delta: float) -> void:
+1818: func _update_overheads() -> void:
+1831: func _unhandled_input(event: InputEvent) -> void:
+1900: func set_hover(p: Vector2i) -> void:
+1911: func _manual_teams() -> Array:
+1921: func _owner_human(u: Unit) -> bool:
+1927: func _cpu_owns_reaction() -> bool:
+1932: func _auto_actor_is_me() -> bool:
+1940: func _client_may_act() -> bool:
+1965: func _on_reaction_event(u: Unit, kind: String, text: String) -> void:
+1969: func _present_reaction_event(u: Unit, kind: String, text: String) -> void:
+1979: func _update_unit_facing(u: Unit) -> void:
+1987: func _click_special(p: Vector2i) -> int:
+2005: func _dir_from_screen(sd: Vector2) -> int:
+2019: func choose(id: String) -> bool:

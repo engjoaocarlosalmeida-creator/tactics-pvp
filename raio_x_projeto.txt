@@ -1,0 +1,25 @@
+=== STATUS DO GIT ===
+
+=== DIFF ESTATISTICO ===
+
+=== TOP 15 MAIORES ARQUIVOS (.gd / .tscn) ===
+
+Linhas Arquivo
+------ -------
+  2029 src\view\game_view.gd
+   809 src\view\hud.gd
+   675 src\core\match_state.gd
+   497 tests\cases\test_view_combat.gd
+   378 src\ai\simple_bot.gd
+   341 tests\cases\test_fuzz_matches.gd
+   334 src\view\team_screen.gd
+   325 src\view\game_visual_presenter.gd
+   276 src\view\items_screen.gd
+   274 tests\cases\test_match.gd
+   268 tests\cases\test_combat_reactions.gd
+   252 src\view\account_screen.gd
+   240 src\view\class_screen.gd
+   202 src\view\ui_theme.gd
+   201 src\core\character.gd
+
+
