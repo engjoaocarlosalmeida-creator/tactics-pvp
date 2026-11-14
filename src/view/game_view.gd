@@ -9,12 +9,16 @@ extends Node3D
 
 
 const CHARACTER_MODEL := preload("res://src/view/character_model.gd")
+const GAME_VISUAL_PRESENTER := preload("res://src/view/game_visual_presenter.gd")
+const MATCH_NET_BRIDGE := preload("res://src/view/match_net_bridge.gd")
+const BOARD_OVERLAY_RENDERER := preload("res://src/view/board_overlay_renderer.gd")
+const MATCH_INPUT_CONTROLLER := preload("res://src/view/match_input_controller.gd")
+const SCREEN_ROUTER := preload("res://src/view/screen_router.gd")
+const HUD_PRESENTER := preload("res://src/view/hud_presenter.gd")
 const TEAM_COLORS: Array[Color] = [Color(0.25, 0.55, 1.0), Color(1.0, 0.35, 0.3)]
 const TEAM_NAMES: Array[String] = ["Azul", "Vermelho"]
 const ALLY_COLOR := Color(0.3, 0.62, 1.0)
 const ENEMY_COLOR := Color(0.95, 0.28, 0.25)
-const ATTACK_ANIMATIONS := ["espadada_dentroparafora", "espadada_foraparadentro"]
-const WALK_STEP_DURATION := 0.16
 
 var animate := true
 var test_mode := false
@@ -32,11 +36,12 @@ var terrain_root: Node3D
 var units_root: Node3D
 var overlay_root: Node3D
 var labels_root: Node3D
-var hover_marker: MeshInstance3D
-var click_marker: Node3D
+var overlay_renderer
+var input_controller
+var screen_router
+var hud_presenter
 var game_pause_controller: GamePauseController
-var game_camera_rig: GameCameraRig
-var game_visual_presenter: GameVisualPresenter
+var game_visual_presenter
 
 var hud: Hud
 var mode_pending := ""
@@ -47,6 +52,7 @@ var team_screen: TeamScreen
 
 
 var screen
+var net_bridge
 var net: NetSession
 var my_team := 0
 var awaiting := false
@@ -67,9 +73,6 @@ var camera_rig: GameCameraRig
 var yaw := 45.0
 var pitch := -38.0
 var distance := 20.0
-var _follow_timer := 0.0
-var _rc_start := Vector2.ZERO
-var _rc_dragged := false
 var hover := Picking.NONE
 var selected_tile := Picking.NONE
 var _focus_arg := ""
@@ -81,24 +84,15 @@ var attack_area := {}
 var reaction_tiles := {}
 var menu_unit: Unit
 var preview := {}
-var _committing_unit := -1
 
 var busy := 0
 var _t := 0.0
 var _visual_generation := 0
-var _visual_queue: Array[Callable] = []
-var _collecting_visual_events := false
-var _attack_animation_index := {}
-var _death_animation_started := {}
-var _dying_turn_snapshots := {}
-var float_log: Array = []
 
 var bot_rng := RandomNumberGenerator.new()
 var cpu_wait := 0.0
 var end_shown := false
 var last_rewards := {}
-var _cmd_queue: Array = []
-var _mats := {}
 var _prompt_hint := false
 var _shot_path := ""
 var _shot_frames := 0
@@ -125,28 +119,40 @@ func _ready() -> void:
 	game_pause_controller = GamePauseController.new()
 	add_child(game_pause_controller)
 
-	game_camera_rig = GameCameraRig.new()
-	game_camera_rig.game_view_ref = self # Pass reference back to the orchestrator
-	add_child(game_camera_rig)
-	camera_rig = game_camera_rig
+	camera_rig = GameCameraRig.new()
+	camera_rig.game_view_ref = self
+	add_child(camera_rig)
 
 
-	game_visual_presenter = GameVisualPresenter.new()
+	game_visual_presenter = GAME_VISUAL_PRESENTER.new()
 	game_visual_presenter.game_view_ref = self
 	add_child(game_visual_presenter)
+	overlay_renderer = BOARD_OVERLAY_RENDERER.new()
+	add_child(overlay_renderer)
+	overlay_renderer.setup(self)
+	input_controller = MATCH_INPUT_CONTROLLER.new()
+	add_child(input_controller)
+	input_controller.setup(self)
+	screen_router = SCREEN_ROUTER.new()
+	add_child(screen_router)
+	screen_router.setup(self)
+	hud_presenter = HUD_PRESENTER.new()
+	add_child(hud_presenter)
+	hud_presenter.setup(self)
 	# ---------------------------------
 
 	hud = Hud.new()
 	add_child(hud)
-	net = NetSession.new()
-	net.name = "Net"
-	add_child(net)
+	net_bridge = MATCH_NET_BRIDGE.new()
+	add_child(net_bridge)
+	net_bridge.setup(self)
+	net = net_bridge.net
 	hud.menu_item_chosen.connect(choose)
 	hud.confirm_ok.connect(confirm_accept)
 	hud.confirm_cancel.connect(confirm_reject)
 	hud.order_clicked.connect(_on_order_clicked)
-	hud.options_requested.connect(_show_options)
-	hud.option_changed.connect(_on_option_changed)
+	hud.options_requested.connect(screen_router.show_options)
+	hud.option_changed.connect(screen_router.on_option_changed)
 	hud.team_requested.connect(func(): open_screen("team"))
 	hud.account_requested.connect(func(): open_screen("account"))
 	hud.wiki_requested.connect(func(): open_screen("wiki"))
@@ -154,17 +160,10 @@ func _ready() -> void:
 	hud.items_requested.connect(func(): open_screen("items"))
 	hud.menu_choice.connect(func(md): start_match(md))
 	hud.restart_pressed.connect(func(): _restart())
-	hud.menu_pressed.connect(func(): _show_menu())
+	hud.menu_pressed.connect(func(): screen_router.show_menu())
 	hud.quit_pressed.connect(func(): get_tree().quit())
-	hud.host_requested.connect(func(): _start_host(NetSession.DEFAULT_PORT))
-	hud.join_requested.connect(func(addr): _start_join(addr, NetSession.DEFAULT_PORT))
-	net.setup_received.connect(_on_net_setup)
-	net.command_from_client.connect(_on_net_command_from_client)
-	net.command_applied.connect(_on_net_command_applied)
-	net.command_rejected.connect(func(): awaiting = false; _try_refresh())
-	net.lost_connection.connect(_on_net_lost)
-	net.connection_failed.connect(func(): hud.show_message("Não conectou", "Não foi possível conectar. Confira o IP e se o anfitrião já está esperando."))
-	net.client_joined.connect(func(): hud.show_waiting("Adversário conectou", "Preparando a partida..."))
+	hud.host_requested.connect(func(): net_bridge.start_host(NetSession.DEFAULT_PORT))
+	hud.join_requested.connect(func(addr): net_bridge.start_join(addr, NetSession.DEFAULT_PORT))
 
 
 	if test_mode:
@@ -190,9 +189,9 @@ func _ready() -> void:
 	var port := int(args.get("port", NetSession.DEFAULT_PORT))
 	if args.get("net", "") == "host":
 		net.forced_seed = seed_arg
-		_start_host(port)
+		net_bridge.start_host(port)
 	elif args.get("net", "") == "join":
-		_start_join(args.get("ip", "127.0.0.1"), port)
+		net_bridge.start_join(args.get("ip", "127.0.0.1"), port)
 	elif args.has("open"):
 		open_screen(str(args["open"]))
 	else:
@@ -215,110 +214,27 @@ func _ready() -> void:
 				choose("move_mode")
 				click_tile(dest)
 		else:
-			_show_menu(not args.has("no-splash"))
+			screen_router.show_menu(not args.has("no-splash"))
 
 
 func open_screen(kind: String) -> void:
-	close_screen()
-	hud.hide_overlay()
-
-	var new_screen
-	match kind:
-		"team":
-			new_screen = TeamScreen.new()
-		"classes":
-			new_screen = ClassScreen.new()
-		"items":
-			new_screen = ItemsScreen.new()
-		"account":
-			new_screen = AccountScreen.new()
-			new_screen.account = account
-		"wiki":
-			new_screen = WikiScreen.new()
-		_:
-			_show_menu()
-			return
-
-	self.screen = new_screen
-	add_child(self.screen)
-	self.screen.setup(rules, catalog, roster)
-	if self.screen.has_signal("changed"):
-		self.screen.changed.connect(_save_roster)
-	if self.screen.has_signal("open_other"):
-		self.screen.open_other.connect(func(k, char_index): _open_from_screen(k, char_index))
-	self.screen.closed.connect(func():
-		close_screen()
-		_show_menu())
-
-
-func _open_from_screen(kind: String, char_index: int) -> void:
-	open_screen(kind)
-	if screen != null and screen.has_method("focus_character"):
-		screen.focus_character(char_index)
+	screen_router.open_screen(kind)
 
 
 func close_screen() -> void:
-	if screen != null:
-		remove_child(screen)
-		screen.queue_free()
-		screen = null
-		team_screen = null
+	screen_router.close_screen()
 
 
 func open_team_screen() -> void:
-	open_screen("team")
+	screen_router.open_screen("team")
 
 
 func close_team_screen() -> void:
-	close_screen()
-func _save_roster() -> void:
-	if not test_mode or save_in_test:
-		roster.save(roster_path)
-	_save_account()
-
-
-func _save_account() -> void:
-	if not test_mode or save_in_test:
-		account.save(account_path)
-func _show_menu(with_splash := false) -> void:
-	net.close()
-	awaiting = false
-	_clear_world()
-	m = null
-	hud.hide_popups()
-	hud.clear_unit_info()
-	hud.set_order_items([])
-	hud.set_hint("")
-	hud.clear_log()
-	hud.show_game_hud(false)
-	hud.set_account(account)
-	if with_splash:
-		hud.show_splash()
-	else:
-		hud.show_menu()
-
-
-func _options_values() -> Dictionary:
-	return {"display_mode": Settings.MODE_NAMES[settings.display_mode], "resolution": settings.resolution_text(),
-			"can_resize": settings.display_mode == Settings.MODE_WINDOW, "volume": settings.volume}
-
-
-func _show_options() -> void:
-	hud.show_options(_options_values())
-
-
-func _on_option_changed(key: String, delta: int) -> void:
-	var screen_size := DisplayServer.screen_get_size() if DisplayServer.get_name() != "headless" else Vector2i(1920, 1080)
-	settings.change(key, delta, screen_size)
-	if not test_mode:
-		settings.save()
-		settings.apply_to_window()
-	hud.show_options(_options_values())
-
+	screen_router.close_screen()
 
 func _restart() -> void:
 	if mode == Mode.ONLINE:
-		_show_menu()
+		screen_router.show_menu()
 	else:
 		start_match(mode)
 
@@ -415,8 +331,7 @@ func _player_name(team: int) -> String:
 		return "Computador"
 	return "Jogador %d" % (team + 1)
 func step_cpu() -> void:
-	if m == null or m.is_over() or busy > 0 or not _visual_queue.is_empty() \
-			or _collecting_visual_events:
+	if m == null or m.is_over() or game_visual_presenter.is_busy():
 		return
 	if not m.pending_reaction.is_empty(): # o computador nao usa o movimento extra
 		_apply_command_with_visuals({"t": "react_skip", "unit": int(m.pending_reaction["unit"])})
@@ -425,10 +340,9 @@ func step_cpu() -> void:
 
 
 func _apply_command_with_visuals(cmd: Dictionary) -> Dictionary:
-	_collecting_visual_events = true
+	game_visual_presenter.begin_collecting()
 	var result := m.apply_command(cmd)
-	_collecting_visual_events = false
-	_drain_visual_queue()
+	game_visual_presenter.end_collecting()
 	return result
 
 
@@ -461,125 +375,25 @@ func _unit_at(p: Vector2i) -> Unit:
 	return null
 
 
-func _item(id: String, label: String, enabled: bool, icon := "") -> Dictionary:
-	var d := {"id": id, "label": label, "enabled": enabled}
-	if icon != "":
-		d["icon"] = icon
-	return d
-func _unit_menu_items() -> Array:
-	var act := m.active
-	var items: Array = []
-	if act.down:
-		items.append(_item("stand", "Levantar", not act.moved)) # personagem caido gasta a acao de movimento
-	else:
-		items.append(_item("move_mode", "Mover", not move_tiles.is_empty() or mode_pending == "move"))
-	items.append(_item("skill_basic", "Atacar" if not act.acted else "Atacar (já atacou)", not act.acted))
-	items.append(_item("items", "Itens", true))
-	items.append(_item("end_turn", "Esperar", true))
-	return items
-
-
-func open_unit_menu() -> void:
-	if not _human_turn() or hud.confirm_visible():
-		return
-	hud.hide_target_window()
-	var act := m.active
-	menu_unit = act
-	hud.show_context_menu(act.short_name(), _unit_menu_items(), _menu_anchor(act), get_viewport().get_visible_rect().size)
-
-
 func _menu_anchor(u: Unit) -> Vector2:
 	var feet: Vector3 = unit_nodes[u.id].global_position + camera.global_transform.basis.x * 0.4
 	return camera.unproject_position(feet) + Vector2(2, -4)
 func _auto_menu() -> void:
 	if menu_wanted and mode_pending == "" and not hud.target_panel.visible and not hud.items_panel.visible \
 			and not m.awaiting_facing and m.pending_reaction.is_empty():
-		open_unit_menu()
+		hud_presenter.open_unit_menu()
 
 
-func click_tile(p: Vector2i, _screen_pos: Vector2 = Vector2(40, 40)) -> bool:
-	if m == null or m.is_over() or busy > 0 or hud.confirm_visible() or screen != null:
-		return false
-	var special := _click_special(p)
-	if special != 0:
-		return special > 0
-	selected_tile = p
-	_update_click_marker()
-	hud.hide_context_menu()
-	hud.hide_target_window()
-	hud.hide_items_window()
-	if mode_pending != "" and _human_turn():
-		var u := m.active
-		if mode_pending == "move" and move_tiles.has(p):
-			_preview_move(p)
-			return true
-		if mode_pending == "attack" and attack_area.has(p):
-			var t := _unit_at(p)
-			var text := "Atacar a casa (%d, %d)?\nNão há ninguém lá." % [p.x, p.y]
-			var cmd := {"t": "attack", "unit": u.id, "x": p.x, "y": p.y}
-			if t != null:
-				text = _attack_text(u, t) + ("\n[color=#ffaa33]É um aliado![/color]" if t.team == u.team else "")
-				cmd = {"t": "attack", "unit": u.id, "target": t.id}
-			_ask_confirm(text, func(): _command(cmd))
-			return true
-		mode_pending = ""
-		hud.set_hint("")
-		menu_wanted = true
-		_try_refresh()
-		return false
-	var target := _unit_at(p)
-	if target == m.active:
-		menu_wanted = true
-		_try_refresh()
-		return true
-	if target != null and target.team == m.active.team:
-		if _human_turn() and not m.active.moved and not m.active.acted and m.ready_alternates(m.active).has(target) \
-and m.has_actions(target):
-			menu_wanted = true
-			camera_rig.trigger_follow()
-			return _command({"t": "switch", "unit": m.active.id, "to": target.id})
-		return false
-	menu_wanted = false
-	if target != null:
-		_open_target_window(target)
-	_try_refresh()
-	return true
+func click_tile(p: Vector2i, screen_pos: Vector2 = Vector2(40, 40)) -> bool:
+	return input_controller.click_tile(p, screen_pos)
 
 
-func _preview_move(p: Vector2i) -> void:
-	var u := m.active
-	var path := Pathing.path_to(m.reachable_for(u), p)
-	preview = {"unit": u, "from": u.pos, "to": p}
-	var n: Node3D = unit_nodes[u.id]
-	var ask := func(): _ask_confirm(_move_text(u, p), func(): _commit_preview())
-	if not animate:
-		n.position = MapGeometry.tile_pos(m.map, p)
-		ask.call()
-		return
-	_animate_unit_path(u, path, ask)
+func confirm_accept() -> void:
+	input_controller.confirm_accept()
 
 
-func _commit_preview() -> void:
-	if preview.is_empty():
-		return
-	var u: Unit = preview["unit"]
-	var to: Vector2i = preview["to"]
-	_committing_unit = u.id
-	preview = {}
-	_command({"t": "move", "unit": u.id, "x": to.x, "y": to.y})
-	_committing_unit = -1
-
-
-func _cancel_preview() -> void:
-	if preview.is_empty():
-		return
-	var u: Unit = preview["unit"]
-	var node: Node3D = unit_nodes[u.id]
-	node.position = MapGeometry.tile_pos(m.map, preview["from"])
-	CHARACTER_MODEL.play_animation(node.get_node("Body"), "Idle")
-	CHARACTER_MODEL.set_facing(node.get_node("Body"), u.facing)
-	preview = {}
-
+func confirm_reject() -> void:
+	input_controller.confirm_reject()
 
 func _approach_tile(u: Unit, t: Unit) -> Vector2i:
 	if m.can_hit(u, t):
@@ -610,7 +424,7 @@ func _run_commands(cmds: Array) -> bool:
 	var first: Dictionary = cmds[0]
 	var rest := cmds.slice(1)
 	if mode == Mode.ONLINE and not net.is_host:
-		_cmd_queue = rest
+		net_bridge.queue_commands(rest)
 		return _command(first)
 	var ok := _command(first)
 	for c in rest:
@@ -630,59 +444,6 @@ func _move_text(u: Unit, p: Vector2i) -> String:
 
 func _attack_text(u: Unit, t: Unit) -> String:
 	return "Atacar [b]%s[/b] com Ataque básico?\nDano previsto: %d" % [t.display_name, m.attack_damage(u, t)]
-
-
-func _ask_confirm(text: String, action: Callable) -> void:
-	pending_confirm = action
-	hud.hide_context_menu()
-	hud.set_hint("")
-	hud.show_confirm(text, get_viewport().get_visible_rect().size)
-
-
-func confirm_accept() -> void:
-	var action := pending_confirm
-	pending_confirm = Callable()
-	hud.hide_confirm()
-	mode_pending = ""
-	if action.is_valid():
-		action.call()
-
-
-func confirm_reject() -> void:
-	pending_confirm = Callable()
-	hud.hide_confirm()
-	_cancel_preview()
-	if mode_pending == "":
-		menu_wanted = true
-	_try_refresh()
-
-
-func _do_move(p: Vector2i) -> void:
-	_command({"t": "move", "unit": m.active.id, "x": p.x, "y": p.y})
-
-
-func _do_attack(t: Unit) -> void:
-	_command({"t": "attack", "unit": m.active.id, "target": t.id})
-func _open_target_window(t: Unit) -> void:
-	var act := m.active
-	var enemy := t.team != act.team
-	var can := enemy and not act.acted and _human_turn() and _approach_tile(act, t) != Picking.NONE
-	var data := {
-		"title": t.display_name,
-		"sex": t.look,
-		"team": t.team,
-		"hp": t.hp, "max_hp": t.max_hp,
-		"text": "Nível %d · %s nv %d\n%s" % [t.char_level, _job_name(t), t.job_level, _player_name(t.team)],
-		"stats": "ATK %d  DEF %d  VEL %d\nMOV %d  PULO %d  ALC %d\n[color=#8d95b8][font_size=15]Bravura %s · Fé %s[/font_size][/color]" % [
-				t.atk, t.defense, t.speed, t.move, t.jump, t.attack_range, Character.classify(t.bravura), Character.classify(t.fe)],
-	}
-	var actions: Array = []
-	if enemy:
-		var label := "Atacar — dano previsto %d" % m.attack_damage(act, t) if can else "Atacar (fora de alcance)"
-		actions.append(_item("t_attack", label, can))
-	actions.append(_item("t_close", "Fechar", true))
-	menu_ctx_unit = t
-	hud.show_target_window(data, actions, get_viewport().get_visible_rect().size)
 
 
 var menu_ctx_unit: Unit
@@ -712,14 +473,14 @@ func _choose_base(id: String) -> bool:
 		var text := _attack_text(m.active, t)
 		if dest != m.active.pos:
 			text += "\nO personagem se move até a casa (%d, %d) antes de atacar." % [dest.x, dest.y]
-		_ask_confirm(text, func(): _do_attack_approach(t))
+		input_controller.ask_confirm(text, func(): _do_attack_approach(t))
 		return true
 	if not _human_turn():
 		return false
 	var act := m.active
 	if id == "items":
 		hud.hide_context_menu()
-		_open_items_window(act)
+		hud_presenter.open_items_window(act)
 		return true
 	if id == "move_mode":
 		if move_tiles.is_empty():
@@ -738,7 +499,7 @@ func _choose_base(id: String) -> bool:
 		_try_refresh()
 		return true
 	if id == "end_turn":
-		_ask_confirm("Esperar e passar o turno de [b]%s[/b]?" % act.display_name, func(): _command({"t": "wait", "unit": act.id}))
+		input_controller.ask_confirm("Esperar e passar o turno de [b]%s[/b]?" % act.display_name, func(): _command({"t": "wait", "unit": act.id}))
 		return true
 	return false
 
@@ -748,7 +509,7 @@ func _ask_switch(to_id: int) -> bool:
 	var to := m.unit_by_id(to_id)
 	if to == null or act.moved or act.acted or not m.ready_alternates(act).has(to):
 		return false
-	_ask_confirm("Alternar para [b]%s[/b]?\n(%s ainda não gastou ações)" % [to.display_name, act.display_name],
+	input_controller.ask_confirm("Alternar para [b]%s[/b]?\n(%s ainda não gastou ações)" % [to.display_name, act.display_name],
 			func(): _command({"t": "switch", "unit": act.id, "to": to_id}))
 	return true
 
@@ -758,123 +519,12 @@ func _on_order_clicked(unit_id: int) -> void:
 		_ask_switch(unit_id)
 
 
-func _open_items_window(u: Unit) -> void:
-	var cat := ItemCatalog.get_default()
-	var rows: Array = []
-	for id in u.items:
-		rows.append({"name": cat.item_name(id), "weight": cat.weight(id), "icon": cat.icon(id)})
-	var summary := "Peso carregado: %d / %d" % [u.carry_weight, u.carry_capacity]
-	if u.move_penalty > 0:
-		summary += "\n[color=#ffaa33]Movimento reduzido em %d pelo peso[/color]" % u.move_penalty
-	hud.show_items_window("Itens de " + u.display_name, summary, rows, get_viewport().get_visible_rect().size, JobArt.face(u.job_id, u.look))
 func cancel_all() -> void:
-	if hud.confirm_visible():
-		confirm_reject()
-		return
-	if m != null and not m.pending_reaction.is_empty(): # cancelar o movimento extra
-		var o := m.pending_unit()
-		if o != null and _owner_human(o):
-			_command({"t": "react_skip", "unit": o.id})
-		return
-	if m != null and m.awaiting_facing and _owner_human(m.active): # Esc mantem o lado atual
-		_command({"t": "face", "unit": m.active.id, "dir": maxi(0, BattleMap.DIRS.find(m.active.facing))})
-		return
-	_cancel_preview()
-	hud.hide_popups()
-	if mode_pending != "":
-		mode_pending = ""
-		hud.set_hint("")
-		menu_wanted = true
-		_try_refresh()
-	else:
-		menu_wanted = true
+	input_controller.cancel_all()
 
 
 func wait() -> void:
-	if _human_turn() and not hud.confirm_visible():
-		choose("end_turn")
-
-
-func _start_host(port: int) -> void:
-	var err := net.host_game(port, _my_team_dicts())
-	if err != OK:
-		hud.show_message("Não foi possível hospedar", "A porta %d está em uso. Feche outra cópia do jogo e tente de novo." % port)
-		return
-	hud.show_game_hud(false)
-	hud.show_waiting("Aguardando adversário",
-			"Peça para o outro jogador escolher [b]Jogar online → Entrar[/b] e digitar este IP:\n[b]%s[/b]  (porta %d)\n[color=#aab]Pela internet, é preciso liberar a porta %d no roteador. Pela Steam isso não será necessário.[/color]" % [NetSession.local_ip(), port, port])
-
-
-func _start_join(address: String, port: int) -> void:
-	var err := net.join_game(address, port, _my_team_dicts())
-	if err != OK:
-		hud.show_message("Não conectou", "Endereço inválido: %s" % address)
-		return
-	hud.show_game_hud(false)
-	hud.show_waiting("Conectando...", "Conectando a %s ..." % address)
-
-
-func _my_team_dicts() -> Array:
-	var out: Array = []
-	for c in roster.team_chars(0, rules.get_int("match", "units_per_team")):
-		out.append(c.to_dict())
-	return out
-
-
-func _on_net_setup(seed_value: int, t0: Array, t1: Array) -> void:
-	mode = Mode.ONLINE
-	my_team = 0 if net.is_host else 1
-	match_seed = seed_value
-	awaiting = false
-	desync = false
-	var per := rules.get_int("match", "units_per_team")
-	var mine := roster.team_chars(0, per)
-	var theirs: Array = []
-	for d in (t1 if net.is_host else t0):
-		var c := Character.from_dict(d)
-		c.id += 1000
-		theirs.append(c)
-	hud.hide_overlay()
-	hud.clear_log()
-	setup_match(MatchState.create_from_characters(seed_value, rules, catalog,
-			mine if net.is_host else theirs, theirs if net.is_host else mine))
-func _on_net_command_from_client(cmd: Dictionary) -> void:
-	if not _client_may_act():
-		net.reject()
-		return
-	var res := _apply_command_with_visuals(cmd)
-	if res.ok:
-		net.broadcast(cmd, m.state_hash())
-	else:
-		net.reject()
-	menu_wanted = true
-	_try_refresh()
-
-
-func _on_net_command_applied(cmd: Dictionary, host_hash: int) -> void:
-	if m == null:
-		return
-	_apply_command_with_visuals(cmd)
-	awaiting = false
-	menu_wanted = true
-	if host_hash != m.state_hash():
-		desync = true
-		hud.add_log("ATENÇÃO: os dois lados ficaram diferentes (dessincronia)")
-	if not _cmd_queue.is_empty():
-		var nxt: Dictionary = _cmd_queue.pop_front()
-		_command(nxt)
-		return
-	_try_refresh()
-
-
-func _on_net_lost() -> void:
-	opponent_left = true
-	if m != null and not m.is_over() and not end_shown:
-		_write_report()
-		hud.show_message("Conexão perdida", "O adversário saiu da partida.")
-		if quit_on_end:
-			get_tree().quit()
-
+	input_controller.wait()
 
 func _write_report() -> void:
 	if report_path == "":
@@ -892,318 +542,46 @@ func _write_report() -> void:
 
 
 func _on_turn_started(u: Unit) -> void:
-	_queue_visual_action(Callable(self, "_present_turn_started").bind(u))
-
-
-func _present_turn_started(u: Unit) -> void:
-	mode_pending = ""
-	menu_wanted = true
-	hud.set_hint("")
-	hud.add_log("Vez de %s (%s)" % [u.short_name(), _player_name(u.team)])
-	camera_rig.trigger_follow()
+	game_visual_presenter.queue_action(Callable(game_visual_presenter, "present_turn_started").bind(u))
 
 
 func _on_unit_moved(u: Unit, path: Array) -> void:
-	_queue_visual_action(Callable(self, "_present_unit_moved").bind(
+	game_visual_presenter.queue_action(Callable(game_visual_presenter, "_present_unit_moved").bind(
 			u, path.duplicate(), u.pos, u.facing))
-
-
-func _present_unit_moved(u: Unit, path: Array, destination: Vector2i, facing: Vector2i) -> void:
-	var n: Node3D = unit_nodes[u.id]
-	CHARACTER_MODEL.set_facing(n.get_node("Body"), facing)
-	if _committing_unit == u.id or not animate or path.is_empty():
-		n.position = MapGeometry.tile_pos(m.map, destination)
-		CHARACTER_MODEL.play_animation(n.get_node("Body"), "Idle")
-		return
-
-	_animate_unit_path(u, path)
-
-
-func _animate_unit_path(u: Unit, path: Array, on_finished := Callable()) -> void:
-	var node: Node3D = unit_nodes[u.id]
-	var body: Node3D = node.get_node("Body")
-	var previous := Vector2i(
-			roundi(node.position.x / MapGeometry.TILE_SIZE + float(m.map.width) / 2.0 - 0.5),
-			roundi(node.position.z / MapGeometry.TILE_SIZE + float(m.map.depth) / 2.0 - 0.5))
-	busy += 1
-	var tw := create_tween()
-	for point in path:
-		var step: Vector2i = point
-		var height_delta := m.map.height_at(step) - m.map.height_at(previous)
-		var action := CHARACTER_MODEL.locomotion_action(height_delta)
-		var duration := WALK_STEP_DURATION
-		if height_delta != 0:
-			duration = clampf(CHARACTER_MODEL.animation_duration(body, action) * 0.3, 0.3, 0.65)
-		var direction := step - previous
-		tw.tween_callback(_face_unit_for_step.bind(u.id, direction))
-		tw.tween_callback(_play_unit_animation.bind(u.id, action, duration))
-		tw.tween_property(node, "position", MapGeometry.tile_pos(m.map, step), duration)
-		previous = step
-	tw.tween_callback(_finish_unit_movement.bind(u.id))
-	tw.finished.connect(func():
-		busy = maxi(0, busy - 1)
-		if on_finished.is_valid():
-			on_finished.call()
-		_drain_visual_queue())
-
-
-func _face_unit_for_step(unit_id: int, direction: Vector2i) -> void:
-	if unit_nodes.has(unit_id):
-		CHARACTER_MODEL.set_facing(unit_nodes[unit_id].get_node("Body"), direction)
-
-
-func _play_unit_animation(unit_id: int, action: String, duration: float) -> void:
-	if unit_nodes.has(unit_id):
-		var attack_action := str(game_visual_presenter._attack_animations.get(unit_id, ""))
-		if attack_action != "" and attack_action != action:
-			game_visual_presenter._finish_attack_animation(unit_id, attack_action)
-		CHARACTER_MODEL.play_animation(unit_nodes[unit_id].get_node("Body"), action, duration)
-
-
-func _finish_unit_movement(unit_id: int) -> void:
-	if unit_nodes.has(unit_id):
-		CHARACTER_MODEL.play_animation(unit_nodes[unit_id].get_node("Body"), "Idle")
 
 
 func _on_attack_resolved(attacker: Unit, _target: Unit, _tile: Vector2i, _damage: int) -> void:
 	var target_hp_before := _target.hp if _target != null else 0
-	_queue_visual_action(Callable(self, "_present_attack_resolved").bind(
+	game_visual_presenter.queue_action(Callable(game_visual_presenter, "_present_attack_resolved").bind(
 			attacker, attacker.facing, _target, _damage, target_hp_before))
 
 
-func _present_attack_resolved(attacker: Unit, facing: Vector2i, target: Unit = null,
-		damage: int = 0, target_hp_before: int = 0) -> void:
-	if not animate or not unit_nodes.has(attacker.id):
-		return
-	if game_visual_presenter._attack_animations.has(attacker.id):
-		game_visual_presenter._attack_animations.erase(attacker.id)
-		busy = maxi(0, busy - 1)
-
-	var index := int(_attack_animation_index.get(attacker.id, 0))
-	var action: String = ATTACK_ANIMATIONS[index % ATTACK_ANIMATIONS.size()]
-	_attack_animation_index[attacker.id] = index + 1
-	var node: Node3D = unit_nodes[attacker.id]
-	CHARACTER_MODEL.set_facing(node.get_node("Body"), facing)
-	if not CHARACTER_MODEL.play_animation(node.get_node("Body"), action):
-		return
-
-	game_visual_presenter._attack_animations[attacker.id] = action
-	busy += 1
-	var duration := CHARACTER_MODEL.animation_duration(node.get_node("Body"), action)
-	if target != null and damage > 0:
-		var impact_delay := duration * 0.85
-		get_tree().create_timer(impact_delay).timeout.connect(
-				_present_attack_impact.bind(
-						target, damage, target_hp_before, _visual_generation))
-	get_tree().create_timer(duration + 0.25).timeout.connect(
-			game_visual_presenter._finish_attack_animation.bind(attacker.id, action))
-
-
-func _present_attack_impact(target: Unit, damage: int, hp_before_hit: int,
-		generation: int = -1) -> void:
-	if (generation >= 0 and generation != _visual_generation) \
-			or damage <= 0 or not unit_nodes.has(target.id):
-		return
-	var hp_after_hit := maxi(0, hp_before_hit - damage)
-	var node: Node3D = unit_nodes[target.id]
-	var hp_fill: Sprite3D = node.get_node("Over/HpFill")
-	hp_fill.region_rect = Rect2(
-			0, 0, maxf(0.0, 80.0 * float(hp_after_hit) / maxf(1.0, float(target.max_hp))), 8)
-	hp_fill.visible = hp_after_hit > 0
-	node.get_node("Over/HpBack").visible = hp_after_hit > 0
-	hud.add_log("%s perde %d de vida (ataque)" % [target.display_name, damage])
-
-	var damage_ratio := float(damage) / maxf(1.0, float(target.max_hp))
-	var damage_size := 32 + roundi(clampf(damage_ratio, 0.0, 1.5) * 18.0)
-	game_visual_presenter._float_text(node.position, "-%d" % damage, Color(1, 0.4, 0.3), damage_size, 0.6)
-	var body := node.get_node_or_null("Body") as Node3D
-	if body != null:
-		CHARACTER_MODEL.flash(body, create_tween())
-
-	if hp_after_hit == 0:
-		_start_death_animation(target, int(_dying_turn_snapshots.get(
-				target.id, target.dying_turns)))
-
-
-func _start_death_animation(u: Unit, turns_left: int) -> void:
-	if _death_animation_started.has(u.id) or not animate or not unit_nodes.has(u.id):
-		return
-	var node: Node3D = unit_nodes[u.id]
-	var body := node.get_node_or_null("Body") as Node3D
-	if body == null:
-		return
-	var action := "death_forward" if randi_range(0, 1) == 0 else "death_back"
-	if not CHARACTER_MODEL.play_animation(body, action):
-		return
-	_death_animation_started[u.id] = action
-	_show_dying_status(u, turns_left)
-	hud.add_log("%s caiu e está morrendo (%d turnos)." % [u.display_name, turns_left])
-	busy += 1
-	var duration := CHARACTER_MODEL.animation_duration(body, action)
-	get_tree().create_timer(duration + 0.25).timeout.connect(
-			_anim_done_for_generation.bind(_visual_generation))
-
-
-func _anim_done_for_generation(generation: int) -> void:
-	if generation == _visual_generation:
-		_anim_done()
-
-
 func _on_unit_hurt(u: Unit, amount: int, reason: String) -> void:
-	_queue_visual_action(Callable(self, "_present_unit_hurt").bind(u, amount, reason, u.hp))
-
-
-func _present_unit_hurt(u: Unit, amount: int, reason: String, hp_after_hit: int) -> void:
-	var cause := "queda" if reason == "fall" else "ataque"
-	var hp_fill: Sprite3D = unit_nodes[u.id].get_node("Over/HpFill")
-	var ratio := float(hp_after_hit) / maxf(1.0, float(u.max_hp))
-	hp_fill.region_rect = Rect2(0, 0, maxf(0.0, 80.0 * ratio), 8)
-	hp_fill.visible = hp_after_hit > 0
-	unit_nodes[u.id].get_node("Over/HpBack").visible = hp_after_hit > 0
-	if reason == "attack" and animate:
-		return
-	hud.add_log("%s perde %d de vida (%s)" % [u.display_name, amount, cause])
-	var node: Node3D = unit_nodes[u.id]
-	var damage_ratio := float(amount) / maxf(1.0, float(u.max_hp))
-	var damage_size := 32 + roundi(clampf(damage_ratio, 0.0, 1.5) * 18.0)
-	game_visual_presenter._float_text(node.position, "-%d" % amount, Color(1, 0.4, 0.3), damage_size, 0.6)
-	if animate:
-		var body := node.get_node_or_null("Body") as Node3D
-		if body != null:
-			CHARACTER_MODEL.flash(body, create_tween())
-		if u.is_dying():
-			_start_death_animation(u, int(_dying_turn_snapshots.get(u.id, u.dying_turns)))
-		_pause_visual_sequence(0.6)
+	game_visual_presenter.queue_action(Callable(game_visual_presenter, "_present_unit_hurt").bind(u, amount, reason, u.hp))
 
 
 func _on_unit_died(u: Unit) -> void:
-	_dying_turn_snapshots[u.id] = u.dying_turns
-	_queue_visual_action(Callable(self, "_present_unit_died").bind(u, u.dying_turns))
-
-
-func _present_unit_died(u: Unit, turns_left: int) -> void:
-	if _death_animation_started.has(u.id):
-		return
-	hud.add_log("%s caiu e está morrendo (%d turnos)." % [u.display_name, turns_left])
-	_show_dying_status(u, turns_left)
-	if not animate:
-		return
-	_start_death_animation(u, turns_left)
+	game_visual_presenter._dying_turn_snapshots[u.id] = u.dying_turns
+	game_visual_presenter.queue_action(Callable(game_visual_presenter, "_present_unit_died").bind(u, u.dying_turns))
 
 
 func _on_unit_dying_turn(u: Unit, turns_left: int) -> void:
-	_queue_visual_action(Callable(self, "_present_unit_dying_turn").bind(u, turns_left))
-
-
-func _present_unit_dying_turn(u: Unit, turns_left: int) -> void:
-	if turns_left <= 0:
-		hud.add_log("%s não resistiu aos ferimentos." % u.display_name)
-		if animate:
-			_pause_visual_sequence(0.25)
-		return
-	hud.add_log("%s continua morrendo (%d turnos)." % [u.display_name, turns_left])
-	_show_dying_status(u, turns_left)
-	if animate:
-		_pause_visual_sequence(0.4)
-
-
-func _show_dying_status(u: Unit, turns_left: int) -> void:
-	var node: Node3D = unit_nodes[u.id]
-	var hp_fill: Sprite3D = node.get_node("Over/HpFill")
-	hp_fill.visible = false
-	node.get_node("Over/ApFill").visible = false
-	node.get_node("Over/ApBack").visible = false
-	var turns: Label3D = node.get_node("Over/Turns")
-	turns.text = str(turns_left)
-	turns.offset = Vector2.ZERO
-	turns.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	turns.font_size = 52
-	turns.modulate = Color(1.0, 0.35, 0.35)
-	turns.visible = true
+	game_visual_presenter.queue_action(Callable(game_visual_presenter, "_present_unit_dying_turn").bind(u, turns_left))
 
 
 func _on_unit_expired(u: Unit) -> void:
-	_queue_visual_action(Callable(self, "_present_unit_expired").bind(u))
-
-
-func _present_unit_expired(u: Unit) -> void:
-	var node: Node3D = unit_nodes[u.id]
-	var body := node.get_node_or_null("Body") as Node3D
-	if body != null:
-		node.remove_child(body)
-		body.queue_free()
-	var skull := CHARACTER_MODEL.create_skull(CHARACTER_MODEL.team_color(u.team))
-	if skull != null:
-		node.add_child(skull)
-	node.get_node("Ring").visible = false
-	node.get_node("Over/HpFill").visible = false
-	node.get_node("Over/ApFill").visible = false
-	node.get_node("Over/ApBack").visible = false
-	node.get_node("Over/Turns").visible = false
+	game_visual_presenter.queue_action(Callable(game_visual_presenter, "_present_unit_expired").bind(u))
 
 
 func _on_xp_gained(u: Unit, job_xp: int, char_xp: int, flag: int) -> void:
-	_queue_visual_action(Callable(self, "_present_xp_gained").bind(u, job_xp, char_xp, flag))
-
-
-func _present_xp_gained(u: Unit, job_xp: int, char_xp: int, flag: int) -> void:
-	var res := Progression.apply_xp(rules, catalog, roster.by_id(), u, job_xp, char_xp)
-	if res.is_empty():
-		return
-	var cid := u.character_id
-	var acc: Dictionary = last_rewards.get(cid, {"xp": 0, "job_xp": 0, "levels_gained": 0, "char_levels_gained": 0, "new_jobs": []})
-	acc.xp += char_xp
-	acc.job_xp += job_xp
-	acc.levels_gained += int(res.levels_gained)
-	acc.char_levels_gained += int(res.char_levels_gained)
-	for nj in res.new_jobs:
-		acc.new_jobs.append(nj)
-	last_rewards[cid] = acc
-	var arrow := " ▲" if flag > 0 else (" ▼" if flag < 0 else "")
-	game_visual_presenter._float_text(unit_nodes[u.id].position, "+%d XP%s" % [char_xp, arrow], Color(1, 0.9, 0.45) if flag >= 0 else Color(1, 0.55, 0.45))
-	if res.char_levels_gained > 0:
-		var ch: Character = roster.by_id()[cid]
-		hud.add_log("%s subiu para o nível %d!" % [ch.first_name(), ch.char_level(rules)])
-	if res.levels_gained > 0:
-		var ch2: Character = roster.by_id()[cid]
-		hud.add_log("%s: classe nível %d!" % [ch2.first_name(), ch2.job_level(rules, ch2.job_id)])
-	_save_roster()
-	if animate:
-		_pause_visual_sequence(1.0)
-
+	game_visual_presenter.queue_action(Callable(game_visual_presenter, "_present_xp_gained").bind(u, job_xp, char_xp, flag))
 
 func _on_match_over(_winner: int) -> void:
 	pass
 
 
-func _anim_done() -> void:
-	busy = maxi(0, busy - 1)
-	_drain_visual_queue()
-
-
-func _queue_visual_action(action: Callable) -> void:
-	_visual_queue.append(action)
-	if not _collecting_visual_events:
-		_drain_visual_queue()
-
-
-func _drain_visual_queue() -> void:
-	if _collecting_visual_events or busy > 0:
-		return
-	while not _visual_queue.is_empty() and busy == 0:
-		var action: Callable = _visual_queue.pop_front()
-		action.call()
-	if _visual_queue.is_empty() and busy == 0:
-		_try_refresh()
-
-
-func _pause_visual_sequence(duration: float) -> void:
-	busy += 1
-	get_tree().create_timer(duration).timeout.connect(_anim_done)
-
-
 func _try_refresh() -> void:
-	if busy > 0 or not _visual_queue.is_empty() or _collecting_visual_events or m == null:
+	if game_visual_presenter.is_busy() or m == null:
 		return
 	_refresh()
 func _refresh() -> void:
@@ -1224,7 +602,7 @@ func _refresh() -> void:
 		hud.set_hint("")
 		hud.clear_unit_info()
 		hud.set_order_items([])
-		_show_end()
+		hud_presenter.show_end()
 		return
 	var u := m.active
 	var human := not _input_locked(u)
@@ -1267,62 +645,23 @@ func _refresh() -> void:
 	elif _prompt_hint:
 		hud.set_hint("")
 		_prompt_hint = false
-	_add_marker(u.pos, Color(1.0, 0.9, 0.2, 0.55))
+	overlay_renderer.add_marker(u.pos, Color(1.0, 0.9, 0.2, 0.55))
 	for p in move_tiles:
 		var info: Dictionary = move_tiles[p]
-		_add_marker(p, Color(1.0, 0.6, 0.1, 0.5) if info.damage > 0 else Color(0.2, 0.55, 1.0, 0.5))
+		overlay_renderer.add_marker(p, Color(1.0, 0.6, 0.1, 0.5) if info.damage > 0 else Color(0.2, 0.55, 1.0, 0.5))
 	for p in attack_area:
-		_add_marker(p, Color(1.0, 0.25, 0.2, 0.32))
+		overlay_renderer.add_marker(p, Color(1.0, 0.25, 0.2, 0.32))
 	for p in target_tiles:
-		_add_marker(p, Color(1.0, 0.15, 0.15, 0.6))
+		overlay_renderer.add_marker(p, Color(1.0, 0.15, 0.15, 0.6))
 	for p in reaction_tiles:
-		_add_marker(p, Color(0.3, 1.0, 0.45, 0.5))
+		overlay_renderer.add_marker(p, Color(0.3, 1.0, 0.45, 0.5))
 	if m.awaiting_facing and _owner_human(u):
 		for d in BattleMap.DIRS:
 			if m.map.in_bounds(u.pos + d):
-				_add_marker(u.pos + d, Color(0.3, 1.0, 0.45, 0.45))
-	_update_hud()
+				overlay_renderer.add_marker(u.pos + d, Color(0.3, 1.0, 0.45, 0.45))
+	hud_presenter.update_hud()
 	if human:
 		_auto_menu()
-
-
-func _add_marker(p: Vector2i, color: Color) -> void:
-	var mi := MeshInstance3D.new()
-	var box := BoxMesh.new()
-	var marker_size := MapGeometry.TILE_SIZE * 0.9
-	box.size = Vector3(marker_size, 0.04, marker_size)
-	mi.mesh = box
-	mi.material_override = _mat(color, true)
-	mi.position = MapGeometry.tile_pos(m.map, p) + Vector3(0, 0.03, 0)
-	overlay_root.add_child(mi)
-
-
-func _add_label(p: Vector2i, text: String, color: Color, size: int, corner: float) -> Label3D:
-	var l := Label3D.new()
-	l.text = text
-	l.modulate = color
-	l.font = UITheme.bold_font
-	l.font_size = size
-	l.pixel_size = 0.0065
-	l.outline_size = 10
-	l.outline_modulate = Color(0, 0, 0, 0.9)
-	l.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-	l.no_depth_test = (corner == 0.0)
-	var base := MapGeometry.tile_pos(m.map, p)
-	l.position = base + Vector3(corner, 0.12, corner)
-	if corner == 0.0:
-		overlay_root.add_child(l)
-	else:
-		labels_root.add_child(l)
-	return l
-
-
-func _label_free_heights() -> int:
-	var n := 0
-	for c in labels_root.get_children():
-		if c is Label3D:
-			n += 1
-	return n
 
 
 func _job_name(u: Unit) -> String:
@@ -1332,91 +671,6 @@ func _job_name(u: Unit) -> String:
 func _job_level(u: Unit) -> int:
 	var ch: Character = roster.by_id().get(u.character_id)
 	return ch.job_level(rules, u.job_id) if ch != null else 1
-func _update_hud() -> void:
-	var u := m.active
-	var col := (ALLY_COLOR if u.team == ally_team() else ENEMY_COLOR).lightened(0.2).to_html(false)
-	var head := "[b][color=#%s]%s[/color][/b] %s\nNível %d · %s nv %d" % [col, u.display_name, _sex_icon(u.look), u.char_level, _job_name(u), u.job_level]
-	var stats := "ATK %d   DEF %d   VEL %d\nMOV %d   PULO %d   ALC %d\n[color=#8d95b8][font_size=15]Bravura %s · Fé %s[/font_size][/color]" % [
-			u.atk, u.defense, u.speed, u.move, u.jump, u.attack_range, Character.classify(u.bravura), Character.classify(u.fe)]
-	hud.set_unit_info(head, u.hp, u.max_hp, stats, JobArt.face(u.job_id, u.look),
-			ALLY_COLOR if u.team == ally_team() else ENEMY_COLOR, u.mp, u.max_mp)
-	var spent := float(m.turns.turn_cost(u.moved, u.acted)) / float(m.turns.threshold) if (u.moved or u.acted) else 0.0
-	hud.set_action_bar(_action_remaining(u), minf(spent, 1.0))
-	var items: Array = []
-	var order := m.turns.preview(m.units, 8)
-	var alts := m.ready_alternates(u)
-	var can_switch := _human_turn() and not u.moved and not u.acted
-	for i in order.size():
-		var o := m.unit_by_id(order[i])
-		items.append({"id": o.id, "team": o.team, "face": JobArt.face(o.job_id, o.look), "number": i + 1,
-				"current": o == u and i == 0, "switchable": can_switch and alts.has(o) and i > 0 and not _listed_before(items, o.id)})
-	hud.set_order_items(items)
-
-
-func _listed_before(items: Array, id: int) -> bool:
-	for it in items:
-		if it["id"] == id:
-			return true
-	return false
-
-
-func _show_end() -> void:
-	if end_shown:
-		return
-	end_shown = true
-	_save_roster()
-	var title := "Empate!"
-	if m.winner >= 0:
-		title = "%s venceu!" % _player_name(m.winner)
-	var body := "[b]XP ganho nesta partida (por ações)[/b]\n"
-	var by_id := roster.by_id()
-	if last_rewards.is_empty():
-		body += "Nenhum personagem do seu elenco atacou."
-	for cid in last_rewards:
-		var ch: Character = by_id[cid]
-		var r: Dictionary = last_rewards[cid]
-		var line := "%s: +%d XP (personagem nv %d) · +%d XP de classe" % [ch.display_name, r.xp, ch.char_level(rules), r.job_xp]
-		if r.levels_gained > 0:
-			line += "  [color=#ffe066]classe nv %d![/color]" % ch.job_level(rules, ch.job_id)
-		for nj in r.new_jobs:
-			line += "  [color=#7fffa0]libera %s[/color]" % catalog.job_name(nj)
-		if ch.attr_points > 0:
-			line += "  (%d pts livres)" % ch.attr_points
-		body += line + "\n"
-	if mode != Mode.DEMO:
-		var kills := 0
-		for u in m.units:
-			if u.team == ally_team():
-				kills += u.kills
-		var won := m.winner == ally_team()
-		account.record_match(kills, won, mode == Mode.ONLINE)
-		_save_account()
-		body += "\n[color=#8d95b8]Conta: +1 partida, %d unidade(s) abatida(s)%s[/color]" % [kills,
-				(" · rank %+d" % (Account.RANK_WIN if won else Account.RANK_LOSS)) if mode == Mode.ONLINE else ""]
-	hud.show_end(title, body)
-	_write_report()
-	if quit_on_end:
-		get_tree().quit()
-
-
-func _mat(color: Color, translucent := false) -> StandardMaterial3D:
-	var key := "%s_%s" % [color.to_html(true), translucent]
-	if translucent and _mats.has(key):
-		return _mats[key]
-	if not translucent and _mats.has(key):
-		return _mats[key]
-	var mat := StandardMaterial3D.new()
-	mat.albedo_color = color
-	if not translucent:
-		_mats[key] = mat
-		mat.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST
-	if translucent:
-		mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-		mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-		_mats[key] = mat
-	return mat
-
-
 func _build_environment() -> void:
 	var env := Environment.new()
 	env.background_mode = Environment.BG_COLOR
@@ -1440,33 +694,6 @@ func _build_environment() -> void:
 	add_child(units_root)
 	overlay_root = Node3D.new()
 	add_child(overlay_root)
-	hover_marker = MeshInstance3D.new()
-	var hb := BoxMesh.new()
-	var hover_size := MapGeometry.TILE_SIZE * 0.98
-	hb.size = Vector3(hover_size, 0.06, hover_size)
-	hover_marker.mesh = hb
-	hover_marker.material_override = _mat(Color(1, 1, 1, 0.3), true)
-	hover_marker.visible = false
-	add_child(hover_marker)
-
-	click_marker = Node3D.new()
-	click_marker.visible = false
-	var cm := _mat(Color(1.0, 0.92, 0.25, 0.95), true)
-	var marker_edge := MapGeometry.TILE_SIZE * 0.46
-	var marker_length := MapGeometry.TILE_SIZE * 0.9
-	var marker_thickness := MapGeometry.TILE_SIZE * 0.07
-	for spec in [[Vector3(0, 0, -marker_edge), Vector3(marker_length, 0.05, marker_thickness)],
-			[Vector3(0, 0, marker_edge), Vector3(marker_length, 0.05, marker_thickness)],
-			[Vector3(-marker_edge, 0, 0), Vector3(marker_thickness, 0.05, marker_length)],
-			[Vector3(marker_edge, 0, 0), Vector3(marker_thickness, 0.05, marker_length)]]:
-		var side := MeshInstance3D.new()
-		var bm := BoxMesh.new()
-		bm.size = spec[1]
-		side.mesh = bm
-		side.material_override = cm
-		side.position = spec[0]
-		click_marker.add_child(side)
-	add_child(click_marker)
 	camera_pivot = Node3D.new()
 	add_child(camera_pivot)
 	camera = Camera3D.new()
@@ -1477,14 +704,6 @@ func _build_environment() -> void:
 		_update_camera()
 
 
-func _update_click_marker() -> void:
-	if m == null or selected_tile == Picking.NONE:
-		click_marker.visible = false
-		return
-	click_marker.visible = true
-	click_marker.position = MapGeometry.tile_pos(m.map, selected_tile) + Vector3(0, 0.08, 0)
-
-
 func _clear_world() -> void:
 	_visual_generation += 1
 	for root in [terrain_root, units_root, overlay_root, labels_root]:
@@ -1492,15 +711,11 @@ func _clear_world() -> void:
 			root.remove_child(c)
 			c.queue_free()
 	unit_nodes.clear()
-	_attack_animation_index.clear()
-	_death_animation_started.clear()
-	_dying_turn_snapshots.clear()
-	_visual_queue.clear()
-	_collecting_visual_events = false
+	game_visual_presenter.reset_visual_state()
+	game_visual_presenter.clear_queue()
 	move_tiles.clear()
 	target_tiles.clear()
-	hover_marker.visible = false
-	click_marker.visible = false
+	overlay_renderer.hide_markers()
 	selected_tile = Picking.NONE
 	busy = 0
 
@@ -1590,65 +805,6 @@ and not awaiting and _auto_actor_is_me():
 			get_tree().quit()
 
 
-func _unhandled_input(event: InputEvent) -> void:
-	if m != null and m.awaiting_facing and screen == null and event is InputEventKey and event.pressed and not event.echo \
-			and _owner_human(m.active) and not event.shift_pressed:
-		var sd := Vector2.ZERO
-		match event.keycode:
-			KEY_LEFT, KEY_A:
-				sd = Vector2(-1, 0)
-			KEY_RIGHT, KEY_D:
-				sd = Vector2(1, 0)
-			KEY_UP, KEY_W:
-				sd = Vector2(0, -1)
-			KEY_DOWN, KEY_S:
-				sd = Vector2(0, 1)
-			KEY_ENTER, KEY_SPACE, KEY_ESCAPE:
-				cancel_all()
-				return
-		if sd != Vector2.ZERO:
-			_command({"t": "face", "unit": m.active.id, "dir": _dir_from_screen(sd)})
-			return
-	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_ESCAPE:
-		if screen != null:
-			cancel_all()
-		elif m != null:
-			# Durante a partida, delega o controle de pausa e opções ao novo controlador
-			game_pause_controller.toggle_pause()
-		return
-	if m == null or screen != null:
-		return
-	if event is InputEventMouseButton and event.pressed:
-		match event.button_index:
-			MOUSE_BUTTON_RIGHT:
-				cancel_all()
-			MOUSE_BUTTON_LEFT:
-				var p := pick_at(event.position)
-				if p != Picking.NONE:
-					click_tile(p, event.position)
-				else:
-					cancel_all()
-	elif event is InputEventMouseMotion:
-		if not (event.button_mask & MOUSE_BUTTON_MASK_RIGHT):
-			set_hover(pick_at(event.position))
-	elif event is InputEventKey and event.pressed and not event.echo:
-		if event.shift_pressed and (event.keycode == KEY_RIGHT or event.keycode == KEY_LEFT):
-			_cycle_actor(1 if event.keycode == KEY_RIGHT else -1)
-		elif event.keycode == KEY_SPACE or event.keycode == KEY_ENTER:
-			wait()
-		elif event.keycode == KEY_ESCAPE:
-			cancel_all()
-
-
-func set_hover(p: Vector2i) -> void:
-	hover = p
-	if p == Picking.NONE or m == null:
-		hover_marker.visible = false
-	else:
-		hover_marker.visible = true
-		hover_marker.position = MapGeometry.tile_pos(m.map, p) + Vector3(0, 0.06, 0)
-
-
 # ---------------------------------------------------------------- lado, reacoes e movimento extra
 
 func _manual_teams() -> Array:
@@ -1706,17 +862,7 @@ static func reaction_color(kind: String) -> Color:
 
 ## Reacoes aparecem so com o nome e o feito (o jogo nao explica as regras na tela).
 func _on_reaction_event(u: Unit, kind: String, text: String) -> void:
-	_queue_visual_action(Callable(self, "_present_reaction_event").bind(u, kind, text))
-
-
-func _present_reaction_event(u: Unit, kind: String, text: String) -> void:
-	if unit_nodes.has(u.id):
-		game_visual_presenter._float_text(unit_nodes[u.id].position, text, reaction_color(kind))
-	float_log.append([text, kind])
-	if float_log.size() > 30:
-		float_log.pop_front()
-	if animate:
-		_pause_visual_sequence(1.0)
+	game_visual_presenter.queue_action(Callable(game_visual_presenter, "_present_reaction_event").bind(u, kind, text))
 
 
 func _update_unit_facing(u: Unit) -> void:
@@ -1760,13 +906,4 @@ func _dir_from_screen(sd: Vector2) -> int:
 
 
 func choose(id: String) -> bool:
-	if m == null or m.is_over():
-		return false
-	if id == "stand":
-		if not _human_turn() or not m.active.down or m.active.moved:
-			return false
-		hud.hide_context_menu()
-		var act := m.active
-		_ask_confirm("Levantar [b]%s[/b]?\n(gasta a ação de movimento)" % act.display_name, func(): _command({"t": "stand", "unit": act.id}))
-		return true
-	return _choose_base(id)
+	return input_controller.choose(id)
