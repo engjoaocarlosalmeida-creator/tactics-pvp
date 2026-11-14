@@ -11,7 +11,6 @@ extends Node3D
 const CHARACTER_MODEL := preload("res://src/view/character_model.gd")
 const TEAM_COLORS: Array[Color] = [Color(0.25, 0.55, 1.0), Color(1.0, 0.35, 0.3)]
 const TEAM_NAMES: Array[String] = ["Azul", "Vermelho"]
-const SPRITE_H := 1.8
 const ALLY_COLOR := Color(0.3, 0.62, 1.0)
 const ENEMY_COLOR := Color(0.95, 0.28, 0.25)
 const ATTACK_ANIMATIONS := ["espadada_dentroparafora", "espadada_foraparadentro"]
@@ -43,7 +42,6 @@ var hud: Hud
 var mode_pending := ""
 
 var menu_wanted := true
-var game_options_menu: Control
 var pending_confirm := Callable()
 var team_screen: TeamScreen
 
@@ -91,7 +89,6 @@ var _visual_generation := 0
 var _visual_queue: Array[Callable] = []
 var _collecting_visual_events := false
 var _attack_animation_index := {}
-var _attack_animations := {}
 var _death_animation_started := {}
 var _dying_turn_snapshots := {}
 var float_log: Array = []
@@ -168,11 +165,6 @@ func _ready() -> void:
 	net.lost_connection.connect(_on_net_lost)
 	net.connection_failed.connect(func(): hud.show_message("Não conectou", "Não foi possível conectar. Confira o IP e se o anfitrião já está esperando."))
 	net.client_joined.connect(func(): hud.show_waiting("Adversário conectou", "Preparando a partida..."))
-
-
-	# Note: pause_layer is managed by GamePauseController
-	# The logic below was moved to game_pause_controller.gd
-	# If we need to access it here, we use game_pause_controller.pause_layer
 
 
 	if test_mode:
@@ -384,10 +376,6 @@ func _sex_icon(sex: String) -> String:
 	return "[img=16]res://assets/icons/sex_%s.png[/img]" % ("f" if sex == "f" else "m")
 
 
-func _follow(_u: Unit) -> void:
-	_follow_timer = 1.1
-
-
 func _actor_center() -> Vector3:
 	if m == null or m.active == null or not unit_nodes.has(m.active.id):
 		return Vector3.ZERO
@@ -548,7 +536,7 @@ func click_tile(p: Vector2i, _screen_pos: Vector2 = Vector2(40, 40)) -> bool:
 		if _human_turn() and not m.active.moved and not m.active.acted and m.ready_alternates(m.active).has(target) \
 and m.has_actions(target):
 			menu_wanted = true
-			_follow(target)
+			camera_rig.trigger_follow()
 			return _command({"t": "switch", "unit": m.active.id, "to": target.id})
 		return false
 	menu_wanted = false
@@ -912,7 +900,7 @@ func _present_turn_started(u: Unit) -> void:
 	menu_wanted = true
 	hud.set_hint("")
 	hud.add_log("Vez de %s (%s)" % [u.short_name(), _player_name(u.team)])
-	_follow(u)
+	camera_rig.trigger_follow()
 
 
 func _on_unit_moved(u: Unit, path: Array) -> void:
@@ -1485,7 +1473,8 @@ func _build_environment() -> void:
 	camera.fov = 45
 	camera_pivot.add_child(camera)
 	camera.current = true
-	_update_camera()
+	if camera_rig != null:
+		_update_camera()
 
 
 func _update_click_marker() -> void:
@@ -1504,7 +1493,6 @@ func _clear_world() -> void:
 			c.queue_free()
 	unit_nodes.clear()
 	_attack_animation_index.clear()
-	_attack_animations.clear()
 	_death_animation_started.clear()
 	_dying_turn_snapshots.clear()
 	_visual_queue.clear()
@@ -1531,7 +1519,6 @@ func _update_camera() -> void:
 	camera_pivot.rotation_degrees = Vector3(pitch, yaw, 0)
 	camera.position = Vector3(0, 0, distance)
 
-
 func pick_at(screen_pos: Vector2) -> Vector2i:
 	if m == null:
 		return Picking.NONE
@@ -1542,10 +1529,6 @@ func _process(delta: float) -> void:
 	_t += delta
 	if m != null:
 		game_visual_presenter.update_overheads()
-
-	# Delegate camera processing to the new Rig
-	if camera_rig != null:
-		camera_rig._process(delta)
 
 	if test_mode:
 		return
@@ -1632,40 +1615,21 @@ func _unhandled_input(event: InputEvent) -> void:
 		elif m != null:
 			# Durante a partida, delega o controle de pausa e opções ao novo controlador
 			game_pause_controller.toggle_pause()
-		else:
-			# Se não houver tela e não houver partida ativa (Menu Principal), não faz nada
-			pass
 		return
 	if m == null or screen != null:
 		return
 	if event is InputEventMouseButton and event.pressed:
 		match event.button_index:
 			MOUSE_BUTTON_RIGHT:
-				_rc_start = event.position
-				_rc_dragged = false
+				cancel_all()
 			MOUSE_BUTTON_LEFT:
 				var p := pick_at(event.position)
 				if p != Picking.NONE:
 					click_tile(p, event.position)
 				else:
 					cancel_all()
-			MOUSE_BUTTON_WHEEL_UP:
-				distance = clampf(distance - 2.0, 8.0, 60.0)
-				_update_camera()
-			MOUSE_BUTTON_WHEEL_DOWN:
-				distance = clampf(distance + 2.0, 8.0, 60.0)
-				_update_camera()
-	elif event is InputEventMouseButton and not event.pressed and event.button_index == MOUSE_BUTTON_RIGHT:
-		if not _rc_dragged:
-			cancel_all()
 	elif event is InputEventMouseMotion:
-		if event.button_mask & MOUSE_BUTTON_MASK_RIGHT:
-			if event.position.distance_to(_rc_start) > 6.0:
-				_rc_dragged = true
-			yaw -= event.relative.x * 0.3
-			pitch = clampf(pitch - event.relative.y * 0.2, -80.0, -25.0)
-			_update_camera()
-		else:
+		if not (event.button_mask & MOUSE_BUTTON_MASK_RIGHT):
 			set_hover(pick_at(event.position))
 	elif event is InputEventKey and event.pressed and not event.echo:
 		if event.shift_pressed and (event.keycode == KEY_RIGHT or event.keycode == KEY_LEFT):
