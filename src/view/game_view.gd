@@ -4,7 +4,7 @@
 ## --seed=N --shot=arquivo.png --bot-turns=N --net=host|join --ip= --port= --auto-play --quit-on-end
 ## --fast --report= --roster= --open=team|classes|items|account|wiki --no-splash --cam=yaw,pitch,dist
 ## --focus=x,z.
-class_name MainGameView
+class_name GameView
 extends Node3D
 
 
@@ -100,7 +100,7 @@ func _ready() -> void:
 	account = Account.new() if test_mode else Account.load_or_create()
 	if not test_mode:
 		settings.apply_to_window()
-		_build_environment()
+	_build_environment()
 
 	# --- Module Integration (Step 2) ---
 	# 1. Instantiate new controllers
@@ -141,7 +141,7 @@ func _ready() -> void:
 	net_bridge.command_requested.connect(_command)
 	net_bridge.refresh_requested.connect(_try_refresh)
 	net = net_bridge.net
-	hud.menu_item_chosen.connect(choose)
+	hud.popup_ctrl.menu_item_chosen.connect(choose)
 	hud.confirm_ok.connect(confirm_accept)
 	hud.confirm_cancel.connect(confirm_reject)
 	hud.order_clicked.connect(_on_order_clicked)
@@ -616,20 +616,21 @@ func _job_name(u: Unit) -> String:
 
 
 func _build_environment() -> void:
-	var env := Environment.new()
-	env.background_mode = Environment.BG_COLOR
-	env.background_color = Color(0.09, 0.1, 0.15)
-	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	env.ambient_light_color = Color(0.75, 0.8, 0.9)
-	env.ambient_light_energy = 0.4
-	var we := WorldEnvironment.new()
-	we.environment = env
-	add_child(we)
-	var sun := DirectionalLight3D.new()
-	sun.rotation_degrees = Vector3(-55, -35, 0)
-	sun.light_energy = 0.9
-	sun.shadow_enabled = true
-	add_child(sun)
+	if not test_mode:
+		var env := Environment.new()
+		env.background_mode = Environment.BG_COLOR
+		env.background_color = Color(0.09, 0.1, 0.15)
+		env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+		env.ambient_light_color = Color(0.75, 0.8, 0.9)
+		env.ambient_light_energy = 0.4
+		var we := WorldEnvironment.new()
+		we.environment = env
+		add_child(we)
+		var sun := DirectionalLight3D.new()
+		sun.rotation_degrees = Vector3(-55, -35, 0)
+		sun.light_energy = 0.9
+		sun.shadow_enabled = true
+		add_child(sun)
 	terrain_root = Node3D.new()
 	add_child(terrain_root)
 	labels_root = Node3D.new()

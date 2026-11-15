@@ -1,6 +1,8 @@
 extends Node
 class_name HudOverlayController
 
+enum MatchMode { LOCAL, VS_CPU, DEMO, ONLINE }
+
 signal menu_choice(mode: int)
 signal restart_pressed
 signal menu_pressed
@@ -188,9 +190,9 @@ func show_menu() -> void:
     h.overlay.add_theme_stylebox_override("panel", sb)
     h.overlay_box.custom_minimum_size = Vector2(420, 0)
     var entries := [
-        ["2 jogadores (mesmo PC)", func(): menu_choice.emit(MainGameView.Mode.LOCAL)],
-        ["Jogar contra o computador", func(): menu_choice.emit(MainGameView.Mode.VS_CPU)],
-        ["Computador x computador", func(): menu_choice.emit(MainGameView.Mode.DEMO)],
+        ["2 jogadores (mesmo PC)", func(): menu_choice.emit(MatchMode.LOCAL)],
+        ["Jogar contra o computador", func(): menu_choice.emit(MatchMode.VS_CPU)],
+        ["Computador x computador", func(): menu_choice.emit(MatchMode.DEMO)],
         ["Jogar online", show_online_menu],
         ["Opções", func(): options_requested.emit()],
         ["Sair", func(): quit_pressed.emit()],

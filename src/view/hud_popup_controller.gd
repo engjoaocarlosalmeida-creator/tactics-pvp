@@ -1,6 +1,8 @@
 extends Node
 class_name HudPopupController
 
+signal menu_item_chosen(id: String)
+
 const CHARACTER_MODEL := preload("res://src/view/character_model.gd")
 
 var hud_ref
@@ -46,7 +48,7 @@ func show_context_menu(title: String, items: Array, screen_pos: Vector2, view_si
         b.custom_minimum_size = Vector2(96, 0)
         UITheme.compact(b, 2)
         var id := str(it["id"])
-        b.pressed.connect(func(): h.menu_item_chosen.emit(id))
+        b.pressed.connect(func(): menu_item_chosen.emit(id))
         h.context_box.add_child(b)
         h.context_ids.append(id)
     h._place(h.context_panel, screen_pos, view_size)
@@ -113,7 +115,7 @@ func show_target_window(data: Dictionary, actions: Array, view_size: Vector2) ->
         b.disabled = not bool(it["enabled"])
         b.focus_mode = Control.FOCUS_NONE
         var id := str(it["id"])
-        b.pressed.connect(func(): h.menu_item_chosen.emit(id))
+        b.pressed.connect(func(): menu_item_chosen.emit(id))
         h.target_box.add_child(b)
         h.context_ids.append(id)
     h._place(h.target_panel, Vector2(view_size.x * 0.5 - 40.0, 90.0), view_size)
@@ -166,7 +168,7 @@ func show_items_window(title: String, summary: String, rows: Array, view_size: V
         w.mouse_filter = Control.MOUSE_FILTER_IGNORE
         row.add_child(w)
         h.items_box.add_child(row)
-    h.items_box.add_child(h._button("Fechar", func(): h.menu_item_chosen.emit("items_close")))
+    h.items_box.add_child(h._button("Fechar", func(): menu_item_chosen.emit("items_close")))
     h._place(h.items_panel, Vector2(view_size.x * 0.5 - 160.0, 120.0), view_size)
 
 

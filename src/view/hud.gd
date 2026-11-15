@@ -5,8 +5,8 @@ extends CanvasLayer
 
 const HUD_POPUP_CONTROLLER := preload("res://src/view/hud_popup_controller.gd")
 const HUD_OVERLAY_CONTROLLER := preload("res://src/view/hud_overlay_controller.gd")
+const TEAM_COLORS: Array[Color] = [Color(0.25, 0.55, 1.0), Color(1.0, 0.35, 0.3)]
 
-signal menu_item_chosen(id: String)
 signal confirm_ok
 signal confirm_cancel
 signal order_clicked(unit_id: int)
@@ -328,7 +328,7 @@ func set_order_items(items: Array) -> void:
 		face.set_anchors_preset(Control.PRESET_FULL_RECT)
 		face.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		holder.add_child(face)
-		var team_color: Color = MainGameView.TEAM_COLORS[int(it["team"])]
+		var team_color: Color = TEAM_COLORS[int(it["team"])]
 		var bar := ColorRect.new()
 		bar.color = team_color
 		bar.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
@@ -382,51 +382,51 @@ func clear_log() -> void:
 
 
 func show_context_menu(title: String, items: Array, screen_pos: Vector2, view_size: Vector2, face: Texture2D = null) -> void:
-    popup_ctrl.show_context_menu(title, items, screen_pos, view_size, face)
+	popup_ctrl.show_context_menu(title, items, screen_pos, view_size, face)
 
 
 func move_context_menu(screen_pos: Vector2, view_size: Vector2) -> void:
-    popup_ctrl.move_context_menu(screen_pos, view_size)
+	popup_ctrl.move_context_menu(screen_pos, view_size)
 
 
 func hide_context_menu() -> void:
-    popup_ctrl.hide_context_menu()
+	popup_ctrl.hide_context_menu()
 
 
 func show_target_window(data: Dictionary, actions: Array, view_size: Vector2) -> void:
-    popup_ctrl.show_target_window(data, actions, view_size)
+	popup_ctrl.show_target_window(data, actions, view_size)
 
 
 func hide_target_window() -> void:
-    popup_ctrl.hide_target_window()
+	popup_ctrl.hide_target_window()
 
 
 func show_confirm(text_bbcode: String, view_size: Vector2) -> void:
-    popup_ctrl.show_confirm(text_bbcode, view_size)
+	popup_ctrl.show_confirm(text_bbcode, view_size)
 
 
 func hide_confirm() -> void:
-    popup_ctrl.hide_confirm()
+	popup_ctrl.hide_confirm()
 
 
 func confirm_visible() -> bool:
-    return popup_ctrl.confirm_visible()
+	return popup_ctrl.confirm_visible()
 
 
 func show_items_window(title: String, summary: String, rows: Array, view_size: Vector2, face: Texture2D = null) -> void:
-    popup_ctrl.show_items_window(title, summary, rows, view_size, face)
+	popup_ctrl.show_items_window(title, summary, rows, view_size, face)
 
 
 func hide_items_window() -> void:
-    popup_ctrl.hide_items_window()
+	popup_ctrl.hide_items_window()
 
 
 func any_popup_visible() -> bool:
-    return popup_ctrl.any_popup_visible()
+	return popup_ctrl.any_popup_visible()
 
 
 func hide_popups() -> void:
-    popup_ctrl.hide_popups()
+	popup_ctrl.hide_popups()
 
 func show_splash() -> void:
 	overlay_ctrl.show_splash()

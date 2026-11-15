@@ -127,7 +127,7 @@ func test_expiracao_substitui_modelo_por_caveira_no_local() -> void:
     fallen.dying_turns = 0
     var position: Vector3 = v.unit_nodes[fallen.id].position
 
-    v._present_unit_expired(fallen)
+    v.game_visual_presenter._present_unit_expired(fallen)
 
     var node: Node3D = v.unit_nodes[fallen.id]
     check(node.get_node_or_null("Body") == null, "o corpo é removido")
@@ -175,7 +175,7 @@ func test_barra_de_hp_permanece_oculta_enquanto_unidade_morre() -> void:
     fallen.hp = 0
     fallen.dying_turns = 3
 
-    v._update_unit_visual(fallen)
+    v.game_visual_presenter._update_unit_visual(fallen)
 
     check(not v.unit_nodes[fallen.id].get_node("Over/HpFill").visible,
             "a barra vazia continua oculta durante o estado morrendo")
@@ -198,24 +198,24 @@ func test_impacto_exibe_dano_e_inicia_queda_antes_do_fim_do_golpe() -> void:
     var attacker_player := CHARACTER_MODEL.animation_player(attacker_body)
     var victim_player := CHARACTER_MODEL.animation_player(victim_body)
 
-    v._present_attack_resolved(state.units[0], state.units[0].facing)
+    v.game_visual_presenter._present_attack_resolved(state.units[0], state.units[0].facing)
     check_eq(str(attacker_player.current_animation), "espadada_dentroparafora",
             "o golpe continua em andamento")
-    v._present_attack_impact(victim, 10, 10)
+    v.game_visual_presenter._present_attack_impact(victim, 10, 10)
 
     check(str(victim_player.current_animation).begins_with("death_"),
             "a queda começa no impacto, antes de terminar o golpe")
-    check(v._death_animation_started.has(victim.id), "a animação de morte só inicia uma vez")
+    check(v.game_visual_presenter._death_animation_started.has(victim.id), "a animação de morte só inicia uma vez")
     check_eq(v.unit_nodes[victim.id].get_node("Over/Turns").text, "4",
             "o indicador mostra apenas a contagem")
     check_eq(v.unit_nodes[victim.id].get_node("Over/Turns").offset, Vector2.ZERO,
             "a contagem fica centralizada sobre o tile")
-    v._update_overheads()
+    v.game_visual_presenter.update_overheads()
     check_eq(v.unit_nodes[victim.id].get_node("Over").global_position,
             v.unit_nodes[victim.id].global_position + Vector3(0, 0.35, 0),
             "a contagem fica junto ao personagem caído no centro do tile")
     var damage_visible := false
-    for child in v.get_children():
+    for child in v.overlay_root.get_children():
         if child is Label3D and (child as Label3D).text == "-10":
             damage_visible = true
     check(damage_visible, "o número de dano aparece no impacto")
@@ -227,10 +227,10 @@ func test_texto_de_dano_muda_de_tamanho_com_a_quantidade() -> void:
     if not needs_display():
         return
     var v := _make()
-    v._float_text(Vector3.ZERO, "-3", Color.RED, 34, 0.6)
-    v._float_text(Vector3.ZERO, "-30", Color.RED, 52, 0.6)
+    v.game_visual_presenter._float_text(Vector3.ZERO, "-3", Color.RED, 34, 0.6)
+    v.game_visual_presenter._float_text(Vector3.ZERO, "-30", Color.RED, 52, 0.6)
     var sizes: Array[int] = []
-    for child in v.get_children():
+    for child in v.overlay_root.get_children():
         if child is Label3D:
             sizes.append((child as Label3D).font_size)
     check(sizes.has(34) and sizes.has(52), "dano maior recebe fonte maior")
@@ -252,7 +252,7 @@ func test_interromper_ataque_para_mover_libera_fila_cpu() -> void:
 
     v._on_attack_resolved(attacker, null, Vector2i(1, 0), 0)
     check_eq(v.busy, 1, "a animacao de ataque bloqueia a proxima acao enquanto executa")
-    v._play_unit_animation(attacker.id, "walk", 0.16)
+    v.game_visual_presenter._play_unit_animation(attacker.id, "walk", 0.16)
     animation_player.advance(3.0)
 
     check_eq(v.busy, 0,
@@ -261,7 +261,7 @@ func test_interromper_ataque_para_mover_libera_fila_cpu() -> void:
             "a locomocao substitui a animacao de ataque")
     check_eq(attack_finished[0], 0,
             "o Godot nao emite animation_finished para um golpe interrompido pela locomocao")
-    v._on_unit_animation_finished("espadada_dentroparafora", attacker.id)
+    v.game_visual_presenter._on_unit_animation_finished("espadada_dentroparafora", attacker.id)
     check_eq(v.busy, 0, "o sinal atrasado nao libera o contador duas vezes")
     _cleanup()
 
@@ -269,17 +269,17 @@ func test_interromper_ataque_para_mover_libera_fila_cpu() -> void:
 func test_fila_visual_espera_a_etapa_atual_terminar() -> void:
     var v := _make()
     var events: Array[String] = []
-    v._collecting_visual_events = true
-    v._queue_visual_action(func():
+    v.game_visual_presenter._collecting_visual_events = true
+    v.game_visual_presenter.queue_action(func():
         events.append("movimento")
         v.busy += 1)
-    v._queue_visual_action(func(): events.append("xp"))
-    v._collecting_visual_events = false
-    v._drain_visual_queue()
+    v.game_visual_presenter.queue_action(func(): events.append("xp"))
+    v.game_visual_presenter._collecting_visual_events = false
+    v.game_visual_presenter.drain_queue()
 
     check_eq(events, ["movimento"], "o XP aguarda a etapa visual anterior")
     check_eq(v.busy, 1, "a etapa ativa mantem a fila bloqueada")
-    v._anim_done()
+    v.game_visual_presenter.anim_done()
     check_eq(events, ["movimento", "xp"], "a fila avanca depois da conclusao")
     check_eq(v.busy, 0, "a conclusao libera o bloqueio")
     _cleanup()
@@ -299,21 +299,21 @@ func test_xp_aguarda_ataque_e_aviso_de_dano() -> void:
 
     check(v._command({"t": "attack", "unit": attacker.id, "target": st.units[1].id}),
             "o ataque e aplicado")
-    check(v._attack_animations.has(attacker.id), "o golpe comeca primeiro")
-    check_eq(v._visual_queue.size(), 2, "dano e XP aguardam o golpe")
+    check(v.game_visual_presenter._attack_animations.has(attacker.id), "o golpe comeca primeiro")
+    check_eq(v.game_visual_presenter._visual_queue.size(), 2, "dano e XP aguardam o golpe")
     check(v.last_rewards.is_empty(), "o XP ainda nao foi processado durante o golpe")
 
-    v._present_attack_impact(st.units[1], 8, st.units[1].max_hp)
+    v.game_visual_presenter._present_attack_impact(st.units[1], 8, st.units[1].max_hp)
     var labels: Array[String] = []
-    for child in v.get_children():
+    for child in v.overlay_root.get_children():
         if child is Label3D:
             labels.append((child as Label3D).text)
     check(labels.any(func(text: String): return text.begins_with("-")),
             "o texto de dano aparece no impacto")
     check(v.last_rewards.is_empty(), "o XP continua aguardando o fim do golpe")
 
-    var action := str(v._attack_animations[attacker.id])
-    v._finish_attack_animation(attacker.id, action)
+    var action := str(v.game_visual_presenter._attack_animations[attacker.id])
+    v.game_visual_presenter._finish_attack_animation(attacker.id, action)
     check_eq(v.busy, 1, "o aviso de XP ocupa a fila depois do golpe")
     check(not v.last_rewards.is_empty(), "o XP só e processado depois do golpe")
     _cleanup()
@@ -377,7 +377,7 @@ func test_setas_escolhem_o_lado_pela_camera() -> void:
     var key := InputEventKey.new()
     key.keycode = KEY_RIGHT
     key.pressed = true
-    v._unhandled_input(key)
+    v.input_controller._unhandled_input(key)
     check_eq(u.facing, Vector2i(1, 0), "seta para a direita da tela com a camera padrao = +x")
     _cleanup()
 
@@ -413,7 +413,7 @@ func test_textos_flutuantes_das_reacoes_so_com_nome_e_cores() -> void:
     v.choose("skill_basic")
     v.click_tile(Vector2i(3, 0))
     v.confirm_accept()
-    check_eq(v.float_log, [["Esquiva", "dodge"]], "so o nome do resultado aparece")
+    check_eq(v.game_visual_presenter.float_log, [["Esquiva", "dodge"]], "so o nome do resultado aparece")
     _cleanup()
 
 
