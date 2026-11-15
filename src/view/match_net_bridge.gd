@@ -1,6 +1,9 @@
 extends Node
 class_name MatchNetBridge
 
+signal command_requested(cmd: Dictionary)
+signal refresh_requested
+
 var game_view_ref
 var net: NetSession
 var _cmd_queue: Array = []
@@ -16,7 +19,7 @@ func setup(gv) -> void:
     net.command_applied.connect(_on_net_command_applied)
     net.command_rejected.connect(func():
         game_view_ref.awaiting = false
-        game_view_ref._try_refresh())
+        refresh_requested.emit())
     net.lost_connection.connect(_on_net_lost)
     net.connection_failed.connect(func():
         game_view_ref.hud.show_message("Não conectou", "Não foi possível conectar. Confira o IP e se o anfitrião já está esperando."))
@@ -85,7 +88,7 @@ func _on_net_command_from_client(cmd: Dictionary) -> void:
     else:
         net.reject()
     gv.menu_wanted = true
-    gv._try_refresh()
+    refresh_requested.emit()
 
 
 func _on_net_command_applied(cmd: Dictionary, host_hash: int) -> void:
@@ -100,9 +103,9 @@ func _on_net_command_applied(cmd: Dictionary, host_hash: int) -> void:
         gv.hud.add_log("ATENÇÃO: os dois lados ficaram diferentes (dessincronia)")
     if not _cmd_queue.is_empty():
         var nxt: Dictionary = _cmd_queue.pop_front()
-        gv._command(nxt)
+        command_requested.emit(nxt)
         return
-    gv._try_refresh()
+    refresh_requested.emit()
 
 
 func _on_net_lost() -> void:

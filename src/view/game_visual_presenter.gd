@@ -1,6 +1,8 @@
 extends Node
 class_name GameVisualPresenter
 
+signal queue_drained
+
 const CHARACTER_MODEL := preload("res://src/view/character_model.gd")
 const TEAM_COLORS: Array[Color] = [Color(0.25, 0.55, 1.0), Color(1.0, 0.35, 0.3)]
 const ALLY_COLOR := Color(0.3, 0.62, 1.0)
@@ -526,7 +528,7 @@ func drain_queue() -> void:
 		var action: Callable = _visual_queue.pop_front()
 		action.call()
 	if _visual_queue.is_empty() and game_view_ref.busy == 0:
-		game_view_ref._try_refresh()
+		queue_drained.emit()
 
 
 func pause_sequence(duration: float) -> void:

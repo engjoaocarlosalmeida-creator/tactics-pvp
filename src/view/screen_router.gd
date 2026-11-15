@@ -55,7 +55,6 @@ func close_screen() -> void:
         gv.remove_child(gv.screen)
         gv.screen.queue_free()
         gv.screen = null
-        gv.team_screen = null
 
 
 func save_roster() -> void:

@@ -9,12 +9,14 @@ extends Node3D
 
 
 const CHARACTER_MODEL := preload("res://src/view/character_model.gd")
+const GAME_CAMERA_RIG := preload("res://src/view/game_camera_rig.gd")
 const GAME_VISUAL_PRESENTER := preload("res://src/view/game_visual_presenter.gd")
 const MATCH_NET_BRIDGE := preload("res://src/view/match_net_bridge.gd")
 const BOARD_OVERLAY_RENDERER := preload("res://src/view/board_overlay_renderer.gd")
 const MATCH_INPUT_CONTROLLER := preload("res://src/view/match_input_controller.gd")
 const SCREEN_ROUTER := preload("res://src/view/screen_router.gd")
 const HUD_PRESENTER := preload("res://src/view/hud_presenter.gd")
+const LAUNCH_ARGS := preload("res://src/core/launch_args.gd")
 const TEAM_COLORS: Array[Color] = [Color(0.25, 0.55, 1.0), Color(1.0, 0.35, 0.3)]
 const TEAM_NAMES: Array[String] = ["Azul", "Vermelho"]
 const ALLY_COLOR := Color(0.3, 0.62, 1.0)
@@ -31,7 +33,6 @@ enum Mode {LOCAL, VS_CPU, DEMO, ONLINE}
 
 var mode: int = Mode.LOCAL
 var match_seed: int = 1
-
 var terrain_root: Node3D
 var units_root: Node3D
 var overlay_root: Node3D
@@ -42,15 +43,10 @@ var screen_router
 var hud_presenter
 var game_pause_controller: GamePauseController
 var game_visual_presenter
-
 var hud: Hud
 var mode_pending := ""
-
 var menu_wanted := true
 var pending_confirm := Callable()
-var team_screen: TeamScreen
-
-
 var screen
 var net_bridge
 var net: NetSession
@@ -66,17 +62,15 @@ var roster_path := Roster.SAVE_PATH
 var settings: Settings
 var account: Account
 var account_path := Account.PATH
-
 var camera_pivot: Node3D
 var camera: Camera3D
-var camera_rig: GameCameraRig
+var camera_rig
 var yaw := 45.0
 var pitch := -38.0
 var distance := 20.0
 var hover := Picking.NONE
 var selected_tile := Picking.NONE
 var _focus_arg := ""
-
 var unit_nodes := {}
 var move_tiles := {}
 var target_tiles := {}
@@ -84,11 +78,9 @@ var attack_area := {}
 var reaction_tiles := {}
 var menu_unit: Unit
 var preview := {}
-
 var busy := 0
 var _t := 0.0
 var _visual_generation := 0
-
 var bot_rng := RandomNumberGenerator.new()
 var cpu_wait := 0.0
 var end_shown := false
@@ -96,16 +88,12 @@ var last_rewards := {}
 var _prompt_hint := false
 var _shot_path := ""
 var _shot_frames := 0
-var _autostart_mode := -1
 
 func _ready() -> void:
 	rules = Rules.load_default()
 	catalog = JobCatalog.load_default()
-	var args := {}
+	var args := {} if test_mode else LAUNCH_ARGS.parse_cmdline()
 	if not test_mode:
-		for a in OS.get_cmdline_user_args():
-			var kv := a.trim_prefix("--").split("=", true, 1)
-			args[kv[0]] = kv[1] if kv.size() > 1 else "true"
 		roster_path = args.get("roster", Roster.SAVE_PATH)
 	roster = Roster.create_default(rules, catalog) if test_mode else Roster.load_or_default(rules, catalog, roster_path)
 	settings = Settings.new() if test_mode else Settings.load_from()
@@ -119,13 +107,15 @@ func _ready() -> void:
 	game_pause_controller = GamePauseController.new()
 	add_child(game_pause_controller)
 
-	camera_rig = GameCameraRig.new()
+	camera_rig = GAME_CAMERA_RIG.new()
 	camera_rig.game_view_ref = self
+	camera_rig.camera_changed.connect(_update_camera)
 	add_child(camera_rig)
 
 
 	game_visual_presenter = GAME_VISUAL_PRESENTER.new()
 	game_visual_presenter.game_view_ref = self
+	game_visual_presenter.queue_drained.connect(_try_refresh)
 	add_child(game_visual_presenter)
 	overlay_renderer = BOARD_OVERLAY_RENDERER.new()
 	add_child(overlay_renderer)
@@ -133,6 +123,8 @@ func _ready() -> void:
 	input_controller = MATCH_INPUT_CONTROLLER.new()
 	add_child(input_controller)
 	input_controller.setup(self)
+	input_controller.command_requested.connect(_command)
+	input_controller.refresh_requested.connect(_try_refresh)
 	screen_router = SCREEN_ROUTER.new()
 	add_child(screen_router)
 	screen_router.setup(self)
@@ -146,76 +138,31 @@ func _ready() -> void:
 	net_bridge = MATCH_NET_BRIDGE.new()
 	add_child(net_bridge)
 	net_bridge.setup(self)
+	net_bridge.command_requested.connect(_command)
+	net_bridge.refresh_requested.connect(_try_refresh)
 	net = net_bridge.net
 	hud.menu_item_chosen.connect(choose)
 	hud.confirm_ok.connect(confirm_accept)
 	hud.confirm_cancel.connect(confirm_reject)
 	hud.order_clicked.connect(_on_order_clicked)
-	hud.options_requested.connect(screen_router.show_options)
-	hud.option_changed.connect(screen_router.on_option_changed)
-	hud.team_requested.connect(func(): open_screen("team"))
-	hud.account_requested.connect(func(): open_screen("account"))
-	hud.wiki_requested.connect(func(): open_screen("wiki"))
+	hud.overlay_ctrl.options_requested.connect(screen_router.show_options)
+	hud.overlay_ctrl.option_changed.connect(screen_router.on_option_changed)
+	hud.overlay_ctrl.team_requested.connect(func(): open_screen("team"))
+	hud.overlay_ctrl.account_requested.connect(func(): open_screen("account"))
+	hud.overlay_ctrl.wiki_requested.connect(func(): open_screen("wiki"))
 	hud.splash_done.connect(func(): hud.show_menu())
-	hud.items_requested.connect(func(): open_screen("items"))
-	hud.menu_choice.connect(func(md): start_match(md))
-	hud.restart_pressed.connect(func(): _restart())
-	hud.menu_pressed.connect(func(): screen_router.show_menu())
-	hud.quit_pressed.connect(func(): get_tree().quit())
-	hud.host_requested.connect(func(): net_bridge.start_host(NetSession.DEFAULT_PORT))
-	hud.join_requested.connect(func(addr): net_bridge.start_join(addr, NetSession.DEFAULT_PORT))
+	hud.overlay_ctrl.items_requested.connect(func(): open_screen("items"))
+	hud.overlay_ctrl.menu_choice.connect(func(md): start_match(md))
+	hud.overlay_ctrl.restart_pressed.connect(func(): _restart())
+	hud.overlay_ctrl.menu_pressed.connect(func(): screen_router.show_menu())
+	hud.overlay_ctrl.quit_pressed.connect(func(): get_tree().quit())
+	hud.overlay_ctrl.host_requested.connect(func(): net_bridge.start_host(NetSession.DEFAULT_PORT))
+	hud.overlay_ctrl.join_requested.connect(func(addr): net_bridge.start_join(addr, NetSession.DEFAULT_PORT))
 
 
 	if test_mode:
 		return
-	auto_play = args.has("auto-play")
-	quit_on_end = args.has("quit-on-end")
-	quit_after_turns = int(args.get("quit-after-turns", 0))
-	report_path = args.get("report", "")
-	if args.has("fast") or args.has("shot"):
-		animate = false
-	_shot_path = args.get("shot", "")
-	if args.has("give-xp"):
-		for c in roster.characters:
-			c.add_xp(rules, catalog, int(args["give-xp"]))
-	if args.has("focus"):
-		_focus_arg = str(args["focus"])
-	if args.has("cam"):
-		var cv := str(args["cam"]).split(",")
-		yaw = float(cv[0])
-		pitch = float(cv[1])
-		distance = float(cv[2])
-	var seed_arg := int(args.get("seed", -1))
-	var port := int(args.get("port", NetSession.DEFAULT_PORT))
-	if args.get("net", "") == "host":
-		net.forced_seed = seed_arg
-		net_bridge.start_host(port)
-	elif args.get("net", "") == "join":
-		net_bridge.start_join(args.get("ip", "127.0.0.1"), port)
-	elif args.has("open"):
-		open_screen(str(args["open"]))
-	else:
-		_autostart_mode = {"local": Mode.LOCAL, "cpu": Mode.VS_CPU, "demo": Mode.DEMO}.get(args.get("mode", ""), -1)
-		if _autostart_mode >= 0:
-			start_match(_autostart_mode, seed_arg)
-			if args.has("bot-turns"):
-				var previous_animate := animate
-				animate = false
-				for i in int(args["bot-turns"]):
-					if m == null or m.is_over():
-						break
-					SimpleBot.take_turn(m, bot_rng)
-				animate = previous_animate
-				_try_refresh()
-			if args.has("click-unit") and m != null and not m.is_over():
-				click_tile(m.units[int(args["click-unit"])].pos, Vector2(700, 300))
-			if args.has("confirm-demo") and m != null and not m.is_over():
-				var dest: Vector2i = move_tiles.keys()[0] if not move_tiles.is_empty() else m.active.pos
-				choose("move_mode")
-				click_tile(dest)
-		else:
-			screen_router.show_menu(not args.has("no-splash"))
-
+	LAUNCH_ARGS.apply_to_view(self, args)
 
 func open_screen(kind: String) -> void:
 	screen_router.open_screen(kind)
@@ -668,9 +615,6 @@ func _job_name(u: Unit) -> String:
 	return catalog.job_name(u.job_id) if catalog.has_job(u.job_id) else "-"
 
 
-func _job_level(u: Unit) -> int:
-	var ch: Character = roster.by_id().get(u.character_id)
-	return ch.job_level(rules, u.job_id) if ch != null else 1
 func _build_environment() -> void:
 	var env := Environment.new()
 	env.background_mode = Environment.BG_COLOR
@@ -747,39 +691,6 @@ func _process(delta: float) -> void:
 
 	if test_mode:
 		return
-
-	var shift := Input.is_key_pressed(KEY_SHIFT)
-	var rot := 0.0
-
-	# Check for manual rotation input to potentially override rig's rotation/panning
-	if Input.is_key_pressed(KEY_Q):
-		rot += 1.0
-	if Input.is_key_pressed(KEY_E):
-		rot -= 1.0
-
-	# Check for manual movement input
-	var mv := Vector3.ZERO
-	if not shift:
-		if Input.is_key_pressed(KEY_W) or Input.is_key_pressed(KEY_UP):
-			mv.z -= 1
-		if Input.is_key_pressed(KEY_S) or Input.is_key_pressed(KEY_DOWN):
-			mv.z += 1
-		if Input.is_key_pressed(KEY_A) or Input.is_key_pressed(KEY_LEFT):
-			mv.x -= 1
-		if Input.is_key_pressed(KEY_D) or Input.is_key_pressed(KEY_RIGHT):
-			mv.x += 1
-
-	# Manual rotation and movement must now be routed through the rig
-	if rot != 0.0:
-		camera_rig.handle_rotation_input(rot * 90.0 * delta)
-
-	if mv != Vector3.ZERO:
-		camera_rig.handle_movement_input(mv)
-
-	# Check for follow/tracking logic
-	if m != null and (Input.is_key_pressed(KEY_SPACE) or Input.is_key_pressed(KEY_ENTER)):
-		if camera_rig != null and m.active != null:
-			camera_rig.trigger_follow()
 
 
 	if m != null and hud.context_panel.visible and menu_unit != null and unit_nodes.has(menu_unit.id):

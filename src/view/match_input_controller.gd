@@ -1,6 +1,9 @@
 extends Node
 class_name MatchInputController
 
+signal command_requested(cmd: Dictionary)
+signal refresh_requested
+
 const CHARACTER_MODEL := preload("res://src/view/character_model.gd")
 
 var game_view_ref
@@ -34,29 +37,29 @@ func click_tile(p: Vector2i, _screen_pos: Vector2 = Vector2(40, 40)) -> bool:
             if t != null:
                 text = gv._attack_text(u, t) + ("\n[color=#ffaa33]É um aliado![/color]" if t.team == u.team else "")
                 cmd = {"t": "attack", "unit": u.id, "target": t.id}
-            ask_confirm(text, func(): gv._command(cmd))
+            ask_confirm(text, func(): command_requested.emit(cmd))
             return true
         gv.mode_pending = ""
         gv.hud.set_hint("")
         gv.menu_wanted = true
-        gv._try_refresh()
+        refresh_requested.emit()
         return false
     var target: Unit = gv._unit_at(p)
     if target == gv.m.active:
         gv.menu_wanted = true
-        gv._try_refresh()
+        refresh_requested.emit()
         return true
     if target != null and target.team == gv.m.active.team:
         if gv._human_turn() and not gv.m.active.moved and not gv.m.active.acted and gv.m.ready_alternates(gv.m.active).has(target) \
                 and gv.m.has_actions(target):
             gv.menu_wanted = true
             gv.camera_rig.trigger_follow()
-            return gv._command({"t": "switch", "unit": gv.m.active.id, "to": target.id})
+            command_requested.emit({"t": "switch", "unit": gv.m.active.id, "to": target.id})
         return false
     gv.menu_wanted = false
     if target != null:
         gv.hud_presenter.open_target_window(target)
-    gv._try_refresh()
+    refresh_requested.emit()
     return true
 
 func preview_move(p: Vector2i) -> void:
@@ -81,7 +84,7 @@ func commit_preview() -> void:
     var to: Vector2i = gv.preview["to"]
     gv.game_visual_presenter.committing_unit = u.id
     gv.preview = {}
-    gv._command({"t": "move", "unit": u.id, "x": to.x, "y": to.y})
+    command_requested.emit({"t": "move", "unit": u.id, "x": to.x, "y": to.y})
     gv.game_visual_presenter.committing_unit = -1
 
 
@@ -122,7 +125,7 @@ func confirm_reject() -> void:
     cancel_preview()
     if gv.mode_pending == "":
         gv.menu_wanted = true
-    gv._try_refresh()
+    refresh_requested.emit()
 
 
 func choose(id: String) -> bool:
@@ -134,7 +137,7 @@ func choose(id: String) -> bool:
             return false
         gv.hud.hide_context_menu()
         var act: Unit = gv.m.active
-        ask_confirm("Levantar [b]%s[/b]?\n(gasta a ação de movimento)" % act.display_name, func(): gv._command({"t": "stand", "unit": act.id}))
+        ask_confirm("Levantar [b]%s[/b]?\n(gasta a ação de movimento)" % act.display_name, func(): command_requested.emit({"t": "stand", "unit": act.id}))
         return true
     return gv._choose_base(id)
 
@@ -147,10 +150,10 @@ func cancel_all() -> void:
     if gv.m != null and not gv.m.pending_reaction.is_empty():
         var o: Unit = gv.m.pending_unit()
         if o != null and gv._owner_human(o):
-            gv._command({"t": "react_skip", "unit": o.id})
+            command_requested.emit({"t": "react_skip", "unit": o.id})
         return
     if gv.m != null and gv.m.awaiting_facing and gv._owner_human(gv.m.active):
-        gv._command({"t": "face", "unit": gv.m.active.id, "dir": maxi(0, BattleMap.DIRS.find(gv.m.active.facing))})
+        command_requested.emit({"t": "face", "unit": gv.m.active.id, "dir": maxi(0, BattleMap.DIRS.find(gv.m.active.facing))})
         return
     cancel_preview()
     gv.hud.hide_popups()
@@ -158,7 +161,7 @@ func cancel_all() -> void:
         gv.mode_pending = ""
         gv.hud.set_hint("")
         gv.menu_wanted = true
-        gv._try_refresh()
+        refresh_requested.emit()
     else:
         gv.menu_wanted = true
 
@@ -189,7 +192,7 @@ func _unhandled_input(event: InputEvent) -> void:
                 cancel_all()
                 return
         if sd != Vector2.ZERO:
-            gv._command({"t": "face", "unit": gv.m.active.id, "dir": gv._dir_from_screen(sd)})
+            command_requested.emit({"t": "face", "unit": gv.m.active.id, "dir": gv._dir_from_screen(sd)})
             return
     if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_ESCAPE:
         if gv.screen != null:
