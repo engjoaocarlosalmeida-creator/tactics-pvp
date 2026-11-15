@@ -84,7 +84,7 @@ func test_modelos_3d_recebem_contorno_da_equipe() -> void:
         check(found_outline, "modelo do time %d tem contorno" % unit.team)
         var extra_floor_meshes := 0
         for child in v.unit_nodes[unit.id].get_children():
-            if child is MeshInstance3D and child.name != "Ring":
+            if child is MeshInstance3D:
                 extra_floor_meshes += 1
         check_eq(extra_floor_meshes, 0, "unidade nao tem disco colorido no tile")
     _cleanup()
@@ -140,7 +140,7 @@ func test_expiracao_substitui_modelo_por_caveira_no_local() -> void:
             "a caveira fica apoiada no tile")
     var extra_floor_meshes := 0
     for child in node.get_children():
-        if child is MeshInstance3D and child.name != "Ring":
+        if child is MeshInstance3D:
             extra_floor_meshes += 1
     check_eq(extra_floor_meshes, 0, "a caveira nao tem disco colorido no tile")
     var outline_found := false
@@ -160,7 +160,6 @@ func test_expiracao_substitui_modelo_por_caveira_no_local() -> void:
                     CHARACTER_MODEL.team_color(fallen.team),
                     "a caveira mantém o contorno colorido da equipe")
     check(outline_found, "a caveira tem contorno que identifica a equipe")
-    check(not node.get_node("Ring").visible, "a caveira não aparece como unidade ativa")
     _cleanup()
 
 
@@ -494,4 +493,71 @@ func test_cliente_online_so_age_quando_e_dele() -> void:
     check(not v._client_may_act(), "movimento extra do host: cliente nao responde")
     st.pending_reaction = {"type": "extra_move", "unit": 1, "budget": 2}
     check(v._client_may_act(), "movimento extra do cliente: ele responde")
+    _cleanup()
+
+
+func test_camera_trava_ajustes_manuais_durante_animacao() -> void:
+    var v := _make()
+    var st := _duel([[0, 0, 0]], Vector2i(0, 0), Vector2i(2, 0))
+    v.setup_match(st)
+    var initial_yaw: float = v.yaw
+    var initial_dist: float = v.distance
+    var initial_pos: Vector3 = v.camera_pivot.position
+
+    v.busy = 1
+    check(v.camera_rig.is_locked(), "camera trava enquanto ha animacao ativa")
+    v.camera_rig.handle_rotation_input(25.0)
+    v.camera_rig.handle_movement_input(Vector3(1, 0, 0))
+    var wheel := InputEventMouseButton.new()
+    wheel.button_index = MOUSE_BUTTON_WHEEL_UP
+    wheel.pressed = true
+    v.camera_rig._unhandled_input(wheel)
+
+    check_eq(v.yaw, initial_yaw, "rotacao manual ignorada durante animacao")
+    check_eq(v.distance, initial_dist, "zoom manual ignorado durante animacao")
+    check_eq(v.camera_pivot.position, initial_pos, "movimento manual ignorado durante animacao")
+
+    v.busy = 0
+    check(not v.camera_rig.is_locked(), "camera destrava ao fim da animacao")
+    v.camera_rig.handle_rotation_input(25.0)
+    check_eq(v.yaw, initial_yaw + 25.0, "rotacao manual funciona quando livre")
+    _cleanup()
+
+
+func test_camera_escolhe_angulo_perpendicular_em_combate() -> void:
+    var v := _make()
+    var st := _duel([[0, 0, 0]], Vector2i(0, 0), Vector2i(2, 0))
+    v.setup_match(st)
+    v.yaw = 15.0
+    var attacker: Unit = st.units[0]
+    var target: Unit = st.units[1]
+
+    v.camera_rig.focus_combat(attacker, target)
+    check(v.camera_rig._cine_active, "enquadramento cinematografico ativado")
+    var expected_mid: Vector3 = (v.unit_nodes[attacker.id].position + v.unit_nodes[target.id].position) * 0.5
+    check_eq(v.camera_rig._cine_target_pos, expected_mid, "foco centralizado entre atacante e defensor")
+    check(absf(v.camera_rig._cine_target_yaw) < 0.01, "angulo perpendicular escolhido para observador")
+    _cleanup()
+
+
+func test_camera_nao_muda_angulo_em_reacoes_entre_mesmos_personagens() -> void:
+    var v := _make()
+    var st := _duel([[0, 0, 0]], Vector2i(0, 0), Vector2i(2, 0))
+    v.setup_match(st)
+    v.yaw = 15.0
+    var attacker: Unit = st.units[0]
+    var target: Unit = st.units[1]
+
+    v.camera_rig.focus_combat(attacker, target)
+    var locked_yaw: float = v.camera_rig._cine_target_yaw
+    var locked_pos: Vector3 = v.camera_rig._cine_target_pos
+
+    v.yaw = 140.0
+    v.camera_rig.on_reaction(target)
+    v.camera_rig.focus_combat(target, attacker)
+    check_eq(v.camera_rig._cine_target_yaw, locked_yaw, "reacao entre mesmos personagens mantem angulo")
+    check_eq(v.camera_rig._cine_target_pos, locked_pos, "reacao entre mesmos personagens mantem foco")
+
+    v.game_visual_presenter.drain_queue()
+    check(not v.camera_rig._cine_active, "enquadramento libera quando a fila esvazia")
     _cleanup()

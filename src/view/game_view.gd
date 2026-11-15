@@ -542,7 +542,6 @@ func _refresh() -> void:
 	for u in m.units:
 		game_visual_presenter._update_unit_visual(u)
 		_update_unit_facing(u)
-		unit_nodes[u.id].get_node("Ring").visible = (not m.is_over()) and u == m.active and u.is_alive()
 		unit_nodes[u.id].get_node("Over/Pointer").visible = false
 	if m.is_over():
 		hud.hide_popups()
@@ -592,7 +591,6 @@ func _refresh() -> void:
 	elif _prompt_hint:
 		hud.set_hint("")
 		_prompt_hint = false
-	overlay_renderer.add_marker(u.pos, Color(1.0, 0.9, 0.2, 0.55))
 	for p in move_tiles:
 		var info: Dictionary = move_tiles[p]
 		overlay_renderer.add_marker(p, Color(1.0, 0.6, 0.1, 0.5) if info.damage > 0 else Color(0.2, 0.55, 1.0, 0.5))

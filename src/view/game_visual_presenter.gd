@@ -135,6 +135,8 @@ func _finish_attack_animation(unit_id: int, action: String) -> void:
 
 
 func _present_reaction_event(u: Unit, kind: String, text: String) -> void:
+	if game_view_ref.camera_rig != null:
+		game_view_ref.camera_rig.on_reaction(u)
 	if game_view_ref.unit_nodes.has(u.id):
 		_float_text(game_view_ref.unit_nodes[u.id].position, text, game_view_ref.reaction_color(kind))
 	float_log.append([text, kind])
@@ -153,19 +155,6 @@ func build_units() -> void:
 		var animation_player := CHARACTER_MODEL.animation_player(model)
 		animation_player.animation_finished.connect(_on_unit_animation_finished.bind(u.id))
 		n.add_child(model)
-		var ring := MeshInstance3D.new()
-		ring.name = "Ring"
-		var torus := TorusMesh.new()
-		torus.inner_radius = 0.4
-		torus.outer_radius = 0.5
-		ring.mesh = torus
-		var rmat := StandardMaterial3D.new()
-		rmat.albedo_color = Color(1, 0.9, 0.2)
-		rmat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-		ring.material_override = rmat
-		ring.position.y = 0.06
-		ring.visible = false
-		n.add_child(ring)
 		var over := Node3D.new()
 		over.name = "Over"
 		var back := _hp_sprite(Color(0.03, 0.04, 0.1, 0.95), 82.0, -41.0)
@@ -262,6 +251,8 @@ func update_overheads() -> void:
 			pointer.offset.y = 62.0 + sin(game_view_ref._t * 5.0) * 7.0
 
 func _present_unit_moved(u: Unit, path: Array, destination: Vector2i, facing: Vector2i) -> void:
+	if game_view_ref.camera_rig != null:
+		game_view_ref.camera_rig.focus_movement(u, destination)
 	var n: Node3D = game_view_ref.unit_nodes[u.id]
 	CHARACTER_MODEL.set_facing(n.get_node("Body"), facing)
 	if committing_unit == u.id or not game_view_ref.animate or path.is_empty():
@@ -320,6 +311,8 @@ func _finish_unit_movement(unit_id: int) -> void:
 
 func _present_attack_resolved(attacker: Unit, facing: Vector2i, target: Unit = null,
 		damage: int = 0, target_hp_before: int = 0) -> void:
+	if game_view_ref.camera_rig != null:
+		game_view_ref.camera_rig.focus_combat(attacker, target)
 	if not game_view_ref.animate or not game_view_ref.unit_nodes.has(attacker.id):
 		return
 	if _attack_animations.has(attacker.id):
@@ -465,7 +458,6 @@ func _present_unit_expired(u: Unit) -> void:
 	var skull := CHARACTER_MODEL.create_skull(CHARACTER_MODEL.team_color(u.team))
 	if skull != null:
 		node.add_child(skull)
-	node.get_node("Ring").visible = false
 	node.get_node("Over/HpFill").visible = false
 	node.get_node("Over/ApFill").visible = false
 	node.get_node("Over/ApBack").visible = false
@@ -528,6 +520,8 @@ func drain_queue() -> void:
 		var action: Callable = _visual_queue.pop_front()
 		action.call()
 	if _visual_queue.is_empty() and game_view_ref.busy == 0:
+		if game_view_ref.camera_rig != null:
+			game_view_ref.camera_rig.clear_cinematic()
 		queue_drained.emit()
 
 
