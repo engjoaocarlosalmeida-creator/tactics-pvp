@@ -181,7 +181,7 @@ static func menu_text(text: String, size := 28) -> Button:
     var b := Button.new()
     b.text = text
     b.flat = true
-    b.focus_mode = Control.FOCUS_ALL
+    b.focus_mode = Control.FOCUS_NONE
     b.alignment = HORIZONTAL_ALIGNMENT_CENTER
     b.custom_minimum_size = Vector2(0, size + 18)
     b.add_theme_font_override("font", title_font)
@@ -189,7 +189,7 @@ static func menu_text(text: String, size := 28) -> Button:
     for st in ["normal", "hover", "pressed", "focus", "disabled", "hover_pressed"]:
         b.add_theme_stylebox_override(st, StyleBoxEmpty.new())
     b.add_theme_color_override("font_color", CREAM)
-    for c in ["font_hover_color", "font_focus_color", "font_pressed_color", "font_hover_pressed_color"]:
+    for c in ["font_hover_color", "font_pressed_color", "font_hover_pressed_color"]:
         b.add_theme_color_override(c, GOLD)
     b.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.95))
     b.add_theme_constant_override("outline_size", 7)
