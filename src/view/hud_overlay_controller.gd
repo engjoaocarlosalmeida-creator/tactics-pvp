@@ -1,6 +1,8 @@
 extends Node
 class_name HudOverlayController
 
+const MAIN_MENU_SCENE := preload("res://scenes/main_menu.tscn")
+
 enum MatchMode { LOCAL, VS_CPU, DEMO, ONLINE }
 
 signal menu_choice(mode: int)
@@ -17,6 +19,7 @@ signal host_requested
 signal join_requested(address: String)
 
 var hud_ref
+var _main_menu_instance: Control
 
 
 func setup(hud_node, root: Control) -> void:
@@ -161,6 +164,9 @@ func set_menu_chrome(on: bool) -> void:
 
 
 func _clear_overlay() -> void:
+    if is_instance_valid(_main_menu_instance):
+        _main_menu_instance.queue_free()
+    _main_menu_instance = null
     var h = hud_ref
     h._clear(h.overlay_box)
     h.overlay.remove_theme_stylebox_override("panel")
@@ -180,28 +186,15 @@ func show_menu() -> void:
     _clear_overlay()
     h.splash.visible = false
     h.menu_bg.visible = true
-    var sb := StyleBoxFlat.new()
-    sb.bg_color = Color(0.02, 0.03, 0.12, 0.42)
-    sb.set_corner_radius_all(14)
-    sb.content_margin_left = 40
-    sb.content_margin_right = 40
-    sb.content_margin_top = 20
-    sb.content_margin_bottom = 20
-    h.overlay.add_theme_stylebox_override("panel", sb)
-    h.overlay_box.custom_minimum_size = Vector2(420, 0)
-    var entries := [
-        ["2 jogadores (mesmo PC)", func(): menu_choice.emit(MatchMode.LOCAL)],
-        ["Jogar contra o computador", func(): menu_choice.emit(MatchMode.VS_CPU)],
-        ["Computador x computador", func(): menu_choice.emit(MatchMode.DEMO)],
-        ["Jogar online", show_online_menu],
-        ["Opções", func(): options_requested.emit()],
-        ["Sair", func(): quit_pressed.emit()],
-    ]
-    for e in entries:
-        var b := UITheme.menu_text(str(e[0]), 26)
-        b.pressed.connect(e[1])
-        h.overlay_box.add_child(b)
-    h.overlay.visible = true
+    h.overlay.visible = false
+    _main_menu_instance = MAIN_MENU_SCENE.instantiate()
+    _main_menu_instance.mode_selected.connect(func(mode: int): menu_choice.emit(mode))
+    _main_menu_instance.online_pressed.connect(show_online_menu)
+    _main_menu_instance.options_pressed.connect(func(): options_requested.emit())
+    _main_menu_instance.quit_pressed.connect(func(): quit_pressed.emit())
+    var ui_root: Node = h.menu_bg.get_parent()
+    ui_root.add_child(_main_menu_instance)
+    ui_root.move_child(_main_menu_instance, h.menu_bg.get_index() + 1)
     set_menu_chrome(true)
     h._focus_first.call_deferred()
 
