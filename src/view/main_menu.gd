@@ -44,14 +44,14 @@ func _ready() -> void:
 	quit_button.pressed.connect(func(): quit_pressed.emit())
 
 
-func _style_menu_button(b: Button, size: int) -> void:
+func _style_menu_button(b: Button, font_size: int) -> void:
 	UITheme.get_theme()
 	b.flat = true
 	b.focus_mode = Control.FOCUS_NONE
 	b.alignment = HORIZONTAL_ALIGNMENT_CENTER
-	b.custom_minimum_size = Vector2(0, size + 18)
+	b.custom_minimum_size = Vector2(0, font_size + 18)
 	b.add_theme_font_override("font", UITheme.title_font)
-	b.add_theme_font_size_override("font_size", size)
+	b.add_theme_font_size_override("font_size", font_size)
 	for st in ["normal", "hover", "pressed", "focus", "disabled", "hover_pressed"]:
 		b.add_theme_stylebox_override(st, StyleBoxEmpty.new())
 	b.add_theme_color_override("font_color", UITheme.CREAM)

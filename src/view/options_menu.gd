@@ -14,14 +14,14 @@ signal back_pressed
 
 
 func _ready() -> void:
-    var theme := UITheme.get_theme()
-    $CenterContainer/PanelContainer.add_theme_stylebox_override("panel", theme.get_stylebox("panel", "PanelContainer"))
+    var ui_theme := UITheme.get_theme()
+    $CenterContainer/PanelContainer.add_theme_stylebox_override("panel", ui_theme.get_stylebox("panel", "PanelContainer"))
     title_label.add_theme_font_override("font", UITheme.title_font)
     title_label.add_theme_font_size_override("font_size", 30)
     title_label.add_theme_color_override("font_color", UITheme.GOLD)
 
     for btn in [display_button, resolution_button, volume_minus_button, volume_plus_button, back_button]:
-        _apply_button_theme(btn, theme)
+        _apply_button_theme(btn, ui_theme)
 
     volume_label.add_theme_font_override("font", UITheme.body_font)
     volume_label.add_theme_font_size_override("font_size", 19)
@@ -42,10 +42,10 @@ func apply_values(values: Dictionary) -> void:
     volume_label.text = "Volume geral: %d%%" % vol_pct
 
 
-func _apply_button_theme(btn: Button, theme: Theme) -> void:
+func _apply_button_theme(btn: Button, ui_theme: Theme) -> void:
     btn.focus_mode = Control.FOCUS_NONE
     for state in ["normal", "hover", "pressed", "disabled", "hover_pressed", "focus"]:
-        btn.add_theme_stylebox_override(state, theme.get_stylebox(state, "Button").duplicate())
+        btn.add_theme_stylebox_override(state, ui_theme.get_stylebox(state, "Button").duplicate())
     btn.add_theme_color_override("font_color", UITheme.CREAM)
     btn.add_theme_color_override("font_hover_color", UITheme.GOLD)
     btn.add_theme_color_override("font_pressed_color", UITheme.GOLD)

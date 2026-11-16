@@ -5,6 +5,7 @@ extends CanvasLayer
 
 const HUD_POPUP_CONTROLLER := preload("res://src/view/hud_popup_controller.gd")
 const HUD_OVERLAY_CONTROLLER := preload("res://src/view/hud_overlay_controller.gd")
+const CONFIRM_DIALOG_SCENE := preload("res://scenes/confirm_dialog.tscn")
 const TEAM_COLORS: Array[Color] = [Color(0.25, 0.55, 1.0), Color(1.0, 0.35, 0.3)]
 
 signal confirm_ok
@@ -152,22 +153,11 @@ func _ready() -> void:
 	context_box = _vbox(context_panel, 4)
 	target_panel = _drag_window(root)
 	target_box = _vbox(target_panel, 6)
-	confirm_panel = _drag_window(root)
-	var cbox := _vbox(confirm_panel, 10)
-	confirm_label = _rich(340)
-	confirm_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	cbox.add_child(confirm_label)
-	var crow := HBoxContainer.new()
-	crow.add_theme_constant_override("separation", 10)
-	cbox.add_child(crow)
-	var ok := _button("OK", func(): confirm_ok.emit())
-	ok.name = "ConfirmOk"
-	ok.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	crow.add_child(ok)
-	var cancel := _button("Cancelar", func(): confirm_cancel.emit())
-	cancel.name = "ConfirmCancel"
-	cancel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	crow.add_child(cancel)
+	confirm_panel = CONFIRM_DIALOG_SCENE.instantiate()
+	root.add_child(confirm_panel)
+	confirm_label = confirm_panel.get_node("VBoxContainer/ConfirmLabel")
+	confirm_panel.confirmed.connect(func(): confirm_ok.emit())
+	confirm_panel.cancelled.connect(func(): confirm_cancel.emit())
 	items_panel = _drag_window(root)
 	items_box = _vbox(items_panel, 4)
 

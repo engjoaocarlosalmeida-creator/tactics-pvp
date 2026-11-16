@@ -3,6 +3,7 @@ class_name HudOverlayController
 
 const MAIN_MENU_SCENE := preload("res://scenes/main_menu.tscn")
 const OPTIONS_MENU_SCENE := preload("res://scenes/options_menu.tscn")
+const ONLINE_MENU_SCENE := preload("res://scenes/online_menu.tscn")
 
 enum MatchMode { LOCAL, VS_CPU, DEMO, ONLINE }
 
@@ -22,6 +23,7 @@ signal join_requested(address: String)
 var hud_ref
 var _main_menu_instance: Control
 var _options_menu_instance: Control
+var _online_menu_instance: Control
 
 
 func setup(hud_node, root: Control) -> void:
@@ -172,6 +174,9 @@ func _clear_overlay() -> void:
     if is_instance_valid(_options_menu_instance):
         _options_menu_instance.queue_free()
     _options_menu_instance = null
+    if is_instance_valid(_online_menu_instance):
+        _online_menu_instance.queue_free()
+    _online_menu_instance = null
     var h = hud_ref
     h._clear(h.overlay_box)
     h.overlay.remove_theme_stylebox_override("panel")
@@ -224,18 +229,14 @@ func show_online_menu() -> void:
     var h = hud_ref
     _clear_overlay()
     h.menu_bg.visible = not h._game_on
-    h.overlay_box.add_child(UITheme.title("JOGAR ONLINE", 28))
-    h.overlay_box.add_child(h._button("Hospedar uma partida", func(): host_requested.emit()))
-    var edit := LineEdit.new()
-    edit.name = "IpEdit"
-    edit.text = "127.0.0.1"
-    edit.placeholder_text = "IP de quem hospeda"
-    edit.custom_minimum_size = Vector2(0, 38)
-    h.overlay_box.add_child(edit)
-    h.overlay_box.add_child(h._button("Entrar na partida desse IP", func(): join_requested.emit(edit.text.strip_edges())))
-    h.overlay_box.add_child(h._button("Voltar", func(): menu_pressed.emit()))
-    h.overlay.visible = true
-    h._focus_first.call_deferred()
+    h.overlay.visible = false
+    _online_menu_instance = ONLINE_MENU_SCENE.instantiate()
+    _online_menu_instance.host_requested.connect(func(): host_requested.emit())
+    _online_menu_instance.join_requested.connect(func(address: String): join_requested.emit(address))
+    _online_menu_instance.back_pressed.connect(func(): menu_pressed.emit())
+    var ui_root: Node = h.menu_bg.get_parent()
+    ui_root.add_child(_online_menu_instance)
+    ui_root.move_child(_online_menu_instance, h.menu_bg.get_index() + 1)
 
 
 func show_waiting(title: String, bbcode: String) -> void:
