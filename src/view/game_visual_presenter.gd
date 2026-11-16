@@ -12,9 +12,13 @@ const SPRITE_H := 1.8
 var game_view_ref
 var units_root: Node3D
 var _attack_animations := {}
+var _reaction_animations := {}
+var _pending_defensive_reactions := {}
 var float_log: Array = []
 const ATTACK_ANIMATIONS := ["espadada_dentroparafora", "espadada_foraparadentro"]
 const WALK_STEP_DURATION := 0.16
+const ATTACK_IMPACT_RATIO := 0.55
+const DEFENSIVE_REACTION_DELAY := 0.12
 var _attack_animation_index := {}
 var _death_animation_started := {}
 var _dying_turn_snapshots := {}
@@ -25,6 +29,8 @@ var _collecting_visual_events := false
 func reset_visual_state() -> void:
 	_attack_animation_index.clear()
 	_attack_animations.clear()
+	_reaction_animations.clear()
+	_pending_defensive_reactions.clear()
 	_death_animation_started.clear()
 	_dying_turn_snapshots.clear()
 
@@ -57,11 +63,14 @@ func _update_unit_visual(u: Unit) -> void:
 		turns.offset = Vector2.ZERO
 		turns.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		turns.font_size = 52
-		turns.modulate = Color(1.0, 0.35, 0.35)
+		turns.modulate = Color(0.05, 0.05, 0.05)
+		turns.outline_modulate = Color(0.95, 0.9, 0.85, 0.85)
+		turns.no_depth_test = false
 		turns.visible = true
 		return
 	var tu: int = game_view_ref.m.turns_until(u) if u.is_alive() else -1
 	turns.text = str(tu) if tu >= 0 else "+"
+	turns.no_depth_test = true
 	turns.modulate = col.lightened(0.35)
 	turns.outline_modulate = col.darkened(0.15)
 	turns.visible = u.is_alive()
@@ -123,7 +132,41 @@ func _tile_color(p: Vector2i) -> Color:
 
 
 func _on_unit_animation_finished(animation_name: StringName, unit_id: int) -> void:
-	_finish_attack_animation(unit_id, str(animation_name))
+	var action := str(animation_name)
+	_finish_attack_animation(unit_id, action)
+	_finish_reaction_animation(unit_id, action)
+
+
+func _trigger_defensive_reaction_animation(unit_id: int, kind: String, generation: int = -1) -> void:
+	if generation >= 0 and generation != game_view_ref._visual_generation:
+		return
+	match kind:
+		"block":
+			_play_reaction_animation(unit_id, "defend")
+		"dodge":
+			_play_reaction_animation(unit_id, "dodge")
+		"parry":
+			_play_reaction_animation(unit_id, "parry")
+
+
+func _play_reaction_animation(unit_id: int, action: String) -> void:
+	if not game_view_ref.animate or not game_view_ref.unit_nodes.has(unit_id):
+		return
+	if _death_animation_started.has(unit_id):
+		return
+	var node: Node3D = game_view_ref.unit_nodes[unit_id]
+	var body := node.get_node_or_null("Body") as Node3D
+	if body == null:
+		return
+	if CHARACTER_MODEL.play_animation(body, action):
+		_reaction_animations[unit_id] = action
+
+
+func _finish_reaction_animation(unit_id: int, action: String) -> void:
+	if _reaction_animations.has(unit_id) and _reaction_animations[unit_id] == action:
+		_reaction_animations.erase(unit_id)
+		if not _death_animation_started.has(unit_id) and game_view_ref.unit_nodes.has(unit_id):
+			CHARACTER_MODEL.play_animation(game_view_ref.unit_nodes[unit_id].get_node("Body"), "Idle")
 
 
 func _finish_attack_animation(unit_id: int, action: String) -> void:
@@ -139,10 +182,15 @@ func _present_reaction_event(u: Unit, kind: String, text: String) -> void:
 		game_view_ref.camera_rig.on_reaction(u)
 	if game_view_ref.unit_nodes.has(u.id):
 		_float_text(game_view_ref.unit_nodes[u.id].position, text, game_view_ref.reaction_color(kind))
+		if kind in ["block", "dodge", "parry"]:
+			if game_view_ref.animate:
+				_pending_defensive_reactions[u.id] = kind
+			else:
+				_trigger_defensive_reaction_animation(u.id, kind)
 	float_log.append([text, kind])
 	if float_log.size() > 30:
 		float_log.pop_front()
-	if game_view_ref.animate:
+	if game_view_ref.animate and kind != "oa" and kind != "counter":
 		pause_sequence(1.0)
 
 func build_units() -> void:
@@ -243,7 +291,7 @@ func update_overheads() -> void:
 		var over: Node3D = n.get_node("Over")
 		var u = game_view_ref.m.unit_by_id(int(id))
 		if u != null and u.is_dying():
-			over.global_position = n.global_position + Vector3(0, 0.35, 0)
+			over.global_position = n.global_position + Vector3(0, 0.78, 0)
 		else:
 			over.global_position = n.global_position + Vector3(0, SPRITE_H * 0.5, 0) + up * (SPRITE_H * 0.5 + 0.14)
 		var pointer: Label3D = over.get_node("Pointer")
@@ -298,6 +346,7 @@ func _face_unit_for_step(unit_id: int, direction: Vector2i) -> void:
 
 func _play_unit_animation(unit_id: int, action: String, duration: float) -> void:
 	if game_view_ref.unit_nodes.has(unit_id):
+		_reaction_animations.erase(unit_id)
 		var attack_action := str(_attack_animations.get(unit_id, ""))
 		if attack_action != "" and attack_action != action:
 			_finish_attack_animation(unit_id, attack_action)
@@ -330,8 +379,14 @@ func _present_attack_resolved(attacker: Unit, facing: Vector2i, target: Unit = n
 	_attack_animations[attacker.id] = action
 	game_view_ref.busy += 1
 	var duration := CHARACTER_MODEL.animation_duration(node.get_node("Body"), action)
+	if target != null and _pending_defensive_reactions.has(target.id):
+		var reaction_kind := str(_pending_defensive_reactions[target.id])
+		_pending_defensive_reactions.erase(target.id)
+		get_tree().create_timer(DEFENSIVE_REACTION_DELAY).timeout.connect(
+				_trigger_defensive_reaction_animation.bind(
+						target.id, reaction_kind, game_view_ref._visual_generation))
 	if target != null and damage > 0:
-		var impact_delay := duration * 0.85
+		var impact_delay := duration * ATTACK_IMPACT_RATIO
 		get_tree().create_timer(impact_delay).timeout.connect(
 				_present_attack_impact.bind(
 						target, damage, target_hp_before, game_view_ref._visual_generation))
@@ -363,6 +418,8 @@ func _present_attack_impact(target: Unit, damage: int, hp_before_hit: int,
 	if hp_after_hit == 0:
 		_start_death_animation(target, int(_dying_turn_snapshots.get(
 				target.id, target.dying_turns)))
+	else:
+		_play_reaction_animation(target.id, "impact")
 
 
 func _start_death_animation(u: Unit, turns_left: int) -> void:
@@ -431,7 +488,23 @@ func _present_unit_dying_turn(u: Unit, turns_left: int) -> void:
 	game_view_ref.hud.add_log("%s continua morrendo (%d turnos)." % [u.display_name, turns_left])
 	_show_dying_status(u, turns_left)
 	if game_view_ref.animate:
+		_shake_dying_counter(u.id)
 		pause_sequence(0.4)
+
+
+func _shake_dying_counter(unit_id: int) -> void:
+	if not game_view_ref.unit_nodes.has(unit_id):
+		return
+	var turns: Label3D = game_view_ref.unit_nodes[unit_id].get_node_or_null("Over/Turns")
+	if turns == null or not turns.visible:
+		return
+	var base_offset := turns.offset
+	var tw := create_tween()
+	tw.tween_property(turns, "offset", base_offset + Vector2(-9.0, 0.0), 0.05)
+	tw.tween_property(turns, "offset", base_offset + Vector2(9.0, 0.0), 0.05)
+	tw.tween_property(turns, "offset", base_offset + Vector2(-6.0, 0.0), 0.05)
+	tw.tween_property(turns, "offset", base_offset + Vector2(6.0, 0.0), 0.05)
+	tw.tween_property(turns, "offset", base_offset, 0.05)
 
 
 func _show_dying_status(u: Unit, turns_left: int) -> void:
@@ -445,7 +518,9 @@ func _show_dying_status(u: Unit, turns_left: int) -> void:
 	turns.offset = Vector2.ZERO
 	turns.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	turns.font_size = 52
-	turns.modulate = Color(1.0, 0.35, 0.35)
+	turns.modulate = Color(0.05, 0.05, 0.05)
+	turns.outline_modulate = Color(0.95, 0.9, 0.85, 0.85)
+	turns.no_depth_test = false
 	turns.visible = true
 
 

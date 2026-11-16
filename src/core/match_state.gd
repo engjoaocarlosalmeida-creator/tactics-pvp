@@ -228,17 +228,19 @@ func move(unit_id: int, dest: Vector2i) -> Dictionary:
     var path := Pathing.path_to(reach, dest)
     var origin := active.pos
     active.move_left = active.move_budget() - int(info.cost)   # o movimento pode ser fracionado
-    active.pos = dest
     active.moved = true
     idle_streak = 0
+    _opportunity_attacks(active, origin, dest)
+    if not active.is_alive():
+        _after_action()
+        return {"ok": true, "damage": 0, "path": []}
+    active.pos = dest
     if not path.is_empty():   # passa a olhar para onde andou
         var prev: Vector2i = path[path.size() - 2] if path.size() > 1 else origin
         active.facing = dominant_dir(prev, path[path.size() - 1])
     unit_moved.emit(active, path)
     if info.damage > 0:
         _damage(active, info.damage, "fall")
-    if active.is_alive():
-        _opportunity_attacks(active, origin, dest)
     _after_action()
     return {"ok": true, "damage": info.damage, "path": path}
 func attack(unit_id: int, target_id: int) -> Dictionary:
@@ -607,7 +609,7 @@ func _opportunity_attacks(mover: Unit, origin: Vector2i, dest: Vector2i) -> void
                 e.reacted = true
                 reaction_event.emit(e, "oa", "Ataque de oportunidade")
                 var dmg := _resolve_hit(e, mover, attack_damage(e, mover), "reaction")
-                attack_resolved.emit(e, mover, mover.pos, dmg)
+                attack_resolved.emit(e, mover, origin, dmg)
                 if dmg > 0:
                     _damage(mover, dmg, "attack", e)
                     _grant_xp(e, mover)
