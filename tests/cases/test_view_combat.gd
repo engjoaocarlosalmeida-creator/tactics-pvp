@@ -561,3 +561,17 @@ func test_camera_nao_muda_angulo_em_reacoes_entre_mesmos_personagens() -> void:
     v.game_visual_presenter.drain_queue()
     check(not v.camera_rig._cine_active, "enquadramento libera quando a fila esvazia")
     _cleanup()
+
+func test_menu_principal_e_opcoes_fecham_ao_iniciar_partida() -> void:
+    var v := _make()
+    v.hud.show_menu()
+    check(is_instance_valid(v.hud.overlay_ctrl._main_menu_instance), "menu principal instanciado pela cena")
+    v.hud.show_options({"display_mode": "Janela", "resolution": "1280x720", "can_resize": true, "volume": 1.0})
+    check(not is_instance_valid(v.hud.overlay_ctrl._main_menu_instance), "menu principal removido ao abrir opcoes")
+    check(is_instance_valid(v.hud.overlay_ctrl._options_menu_instance), "menu de opcoes instanciado pela cena")
+    v.hud.hide_overlay()
+    check(not is_instance_valid(v.hud.overlay_ctrl._options_menu_instance), "menu de opcoes removido ao ocultar overlay")
+    v.hud.show_menu()
+    v.hud.hide_overlay()
+    check(not is_instance_valid(v.hud.overlay_ctrl._main_menu_instance), "menu principal removido ao iniciar partida")
+    _cleanup()

@@ -2,6 +2,7 @@ extends Node
 class_name HudOverlayController
 
 const MAIN_MENU_SCENE := preload("res://scenes/main_menu.tscn")
+const OPTIONS_MENU_SCENE := preload("res://scenes/options_menu.tscn")
 
 enum MatchMode { LOCAL, VS_CPU, DEMO, ONLINE }
 
@@ -20,6 +21,7 @@ signal join_requested(address: String)
 
 var hud_ref
 var _main_menu_instance: Control
+var _options_menu_instance: Control
 
 
 func setup(hud_node, root: Control) -> void:
@@ -167,6 +169,9 @@ func _clear_overlay() -> void:
     if is_instance_valid(_main_menu_instance):
         _main_menu_instance.queue_free()
     _main_menu_instance = null
+    if is_instance_valid(_options_menu_instance):
+        _options_menu_instance.queue_free()
+    _options_menu_instance = null
     var h = hud_ref
     h._clear(h.overlay_box)
     h.overlay.remove_theme_stylebox_override("panel")
@@ -196,36 +201,23 @@ func show_menu() -> void:
     ui_root.add_child(_main_menu_instance)
     ui_root.move_child(_main_menu_instance, h.menu_bg.get_index() + 1)
     set_menu_chrome(true)
-    h._focus_first.call_deferred()
 
 
 func show_options(values: Dictionary) -> void:
     var h = hud_ref
+    if is_instance_valid(_options_menu_instance):
+        _options_menu_instance.apply_values(values)
+        return
     _clear_overlay()
     h.menu_bg.visible = not h._game_on
-    h.overlay_box.add_child(UITheme.title("OPÇÕES", 30))
-    h.overlay_box.add_child(h._button("Modo de tela: %s" % values["display_mode"], func(): option_changed.emit("display_mode", 0)))
-    var res: Button = h._button("Resolução da janela: %s" % values["resolution"], func(): option_changed.emit("resolution", 0))
-    res.disabled = not values["can_resize"]
-    h.overlay_box.add_child(res)
-    var row := HBoxContainer.new()
-    row.add_theme_constant_override("separation", 8)
-    var minus: Button = h._button("−", func(): option_changed.emit("volume", -1))
-    minus.custom_minimum_size = Vector2(60, 38)
-    row.add_child(minus)
-    var vol := Label.new()
-    vol.text = "Volume geral: %d%%" % int(round(float(values["volume"]) * 100.0))
-    vol.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-    vol.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-    vol.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-    row.add_child(vol)
-    var plus: Button = h._button("+", func(): option_changed.emit("volume", 1))
-    plus.custom_minimum_size = Vector2(60, 38)
-    row.add_child(plus)
-    h.overlay_box.add_child(row)
-    h.overlay_box.add_child(h._button("Voltar", func(): menu_pressed.emit()))
-    h.overlay.visible = true
-    h._focus_first.call_deferred()
+    h.overlay.visible = false
+    _options_menu_instance = OPTIONS_MENU_SCENE.instantiate()
+    _options_menu_instance.option_changed.connect(func(key: String, delta: int): option_changed.emit(key, delta))
+    _options_menu_instance.back_pressed.connect(func(): menu_pressed.emit())
+    var ui_root: Node = h.menu_bg.get_parent()
+    ui_root.add_child(_options_menu_instance)
+    ui_root.move_child(_options_menu_instance, h.menu_bg.get_index() + 1)
+    _options_menu_instance.apply_values(values)
 
 
 func show_online_menu() -> void:
@@ -284,6 +276,7 @@ func show_end(title: String, bbcode: String) -> void:
 
 
 func hide_overlay() -> void:
+    _clear_overlay()
     var h = hud_ref
     h.overlay.visible = false
     h.menu_bg.visible = false
