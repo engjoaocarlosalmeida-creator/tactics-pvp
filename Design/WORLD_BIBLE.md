@@ -1,13 +1,18 @@
 TACTICS-PVP
 Livro-Guia do Mundo
-Versão 1.0
+Versão 1.1
+
 Prólogo
 
-Muito antes dos povos mortais caminharem sobre o mundo, os Deuses criaram entidades maiores, capazes de moldar continentes, alterar mares e influenciar os destinos das futuras civilizações.
+Antes dos povos mortais caminharem sobre o mundo, existiam apenas os Deuses.
+
+Vida, Morte e Magia — forças fundamentais além da realidade material que não governam reinos nem elaboram planos, mas simplesmente existem.
+
+Dessa presença divina, como um reflexo projetado sobre um espelho, surgiram entidades maiores capazes de moldar continentes, alterar mares e influenciar os destinos das futuras civilizações.
 
 Essas entidades ficaram conhecidas como os Primordiais.
 
-Durante eras incontáveis, os Primordiais dominaram o mundo.
+Durante eras incontáveis, os Primordiais dominaram o mundo sem jamais conhecerem a verdadeira fonte que os projetou.
 
 Com o passar do tempo, seus descendentes tornaram-se mais numerosos que seus próprios ancestrais.
 
@@ -21,7 +26,7 @@ Poucos os encontram.
 
 Menos ainda sobrevivem para contar suas histórias.
 
-Acima de todos eles permanecem os Deuses, observando silenciosamente o desenrolar do mundo.
+Acima de todos eles permanecem os Deuses, existindo silenciosamente como a própria estrutura da realidade.
 
 Capítulo I
 A Natureza do Mundo
@@ -49,22 +54,22 @@ Os Deuses
 
 Os Deuses estão acima de toda a criação conhecida.
 
-Eles raramente intervêm diretamente no mundo mortal.
+Eles não governam ativamente a vida dos mortais, não escolhem heróis nem intervêm diretamente no mundo.
 
-Suas vontades normalmente se manifestam através dos Primordiais, fenômenos sobrenaturais ou eventos difíceis de explicar.
+Eles são as próprias leis fundamentais da existência — Vida, Morte e Magia — manifestando-se indiretamente através dos reflexos que projetam na realidade.
 
 Nenhuma raça compreende completamente os Deuses.
 
-Mesmo os Primordiais conhecem apenas parte de seus desígnios.
+Nem mesmo os próprios Primordiais conhecem a verdadeira natureza daquilo que os originou.
 
 Capítulo III
 Os Primordiais
 
-Os Primordiais não são deuses.
+Os Primordiais não são deuses e não foram criados por ordem divina.
 
-Mas também estão além da condição mortal.
+São manifestações naturais, ecos projetados na realidade pela simples existência dos Deuses.
 
-Durante eras foram responsáveis por moldar povos, impérios e culturas inteiras.
+Durante eras foram responsáveis por moldar povos, impérios e culturas inteiras, agindo conforme sua própria natureza.
 
 Hoje são extremamente raros.
 
@@ -288,3 +293,60 @@ Cada arena é uma história.
 Cada herói é uma lenda em potencial.
 
 E cada batalha é apenas um fragmento de algo muito maior.
+
+# Azeryn
+
+## O Reflexo da Magia
+
+Azeryn é o Primordial que manifesta a força da Magia no mundo material.
+
+Embora tenha sido o último dos três grandes Primordiais a se manifestar plenamente na criação, sua chegada transformou para sempre a natureza da realidade.
+
+Onde Aion trouxe a existência e Kairon estabeleceu o ciclo do fim, Azeryn trouxe o movimento, o caos criativo e a possibilidade do extraordinário.
+
+---
+
+## Os Astros da Transformação
+
+Antes de Azeryn, o mundo era iluminado apenas por um sol morno, que fornecia energia exata, sem excessos e sem surpresas, enquanto a noite era uma escuridão fria e mortal.
+
+Quando Azeryn surgiu no mundo, trouxe consigo um segundo sol e a lua, acompanhada pelo despertar das estrelas no céu noturno.
+
+Desde então, o céu da criação passou a ostentar dois sóis: o sol antigo ligado a Aion e o novo sol de Azeryn, brilhando lado a lado como símbolo eterno de equilíbrio.
+
+Essa transformação alterou toda a dinâmica do planeta:
+
+- o calor se intensificou e equilibrou as temperaturas entre o dia e a noite
+- as sombras ganharam corpo e profundidade sob a nova luz
+- a lua deu início ao ciclo das marés, trazendo movimento aos oceanos
+- vulcões adormecidos despertaram em ciclos naturais, provocando a renovação necessária da terra
+
+---
+
+## A Onisciência Sob a Luz
+
+Assim como Kairon observa o mundo através das sombras, Azeryn possui onisciência em todos os lugares alcançados pela luz dos astros.
+
+Onde quer que os sóis brilhem durante o dia ou a lua e as estrelas iluminem a noite, Azeryn está presente, enxergando tudo o que ocorre sob o céu aberto.
+
+---
+
+## A Criança Muda
+
+Quando escolhe manifestar-se fisicamente entre os mortais, Azeryn assume a aparência de uma criança muda.
+
+Ela nunca pronuncia palavras em voz alta, comunicando-se diretamente com todas as criaturas físicas através da telepatia.
+
+Essa forma infantil não representa fraqueza ou ingenuidade, mas a natureza pura da curiosidade, da mudança constante e do potencial infinito da Magia.
+
+---
+
+## O Mimetismo Elemental
+
+Azeryn é capaz de assumir a forma de qualquer criatura ou projetar qualquer corpo no mundo.
+
+Entretanto, ao contrário da precisão biológica de Kairon, suas transformações nunca assumem aparência carnal comum.
+
+Todo corpo mimetizado por Azeryn manifesta-se inteiramente composto por elementos puros da criação — como fogo, água, pedra, vento, cristal ou energia arcana pura.
+
+Para Azeryn, a forma física não precisa enganar os olhos: ela é a própria expressão viva da transformação elemental.

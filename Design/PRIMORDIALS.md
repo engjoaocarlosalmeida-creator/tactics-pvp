@@ -360,3 +360,129 @@ Mas mesmo entre eles o interesse pelos Primordiais tornou-se raro.
 Para a maioria dos habitantes do mundo, os Primordiais são apenas mitos antigos.
 
 Ainda assim, suas obras continuam moldando a realidade todos os dias.
+
+
+# Aion
+
+## O Reflexo da Vida
+
+Aion é o Primordial que manifesta a força da Vida no mundo material.
+
+Assim como a própria Vida não possui fronteiras, Aion não está preso a um único território, trono ou civilização.
+
+Ele é o pulso contínuo que impulsiona o crescimento, a adaptação e a abundância por toda a criação.
+
+---
+
+## Presença Física
+
+Fisicamente, Aion existe como uma entidade dríade de poder imensurável.
+
+Seu corpo físico é capaz de caminhar por todos os continentes e nadar pelas profundezas dos mares sem jamais se esgotar.
+
+Onde quer que ele passe, a natureza responde silenciosamente à sua presença.
+
+Sementes adormecidas despertam.
+
+Águas estagnadas voltam a correr.
+
+Ecossistemas inteiros se reorganizam em equilíbrio.
+
+---
+
+## A Árvore Ancestral
+
+Apesar de poder viajar livremente pelo mundo, a essência física de Aion permanece ligada a um único lugar oculto na criação.
+
+Em alguma região remota existe a maior árvore do mundo.
+
+Ela não possui o tamanho absurdo de uma montanha.
+
+Entretanto, ergue-se muito acima de qualquer floresta conhecida, impondo sua presença mesmo quando vista ao lado de grandes cadeias rochosas.
+
+Essa árvore é o coração vivo de Aion.
+
+Mesmo que sua forma viajante seja ferida ou dispersada, sua existência jamais pode ser apagada enquanto suas raízes permanecerem firmes na terra.
+
+---
+
+## A Forma Espiritual
+
+Além de seu corpo físico, Aion é capaz de projetar sua consciência e presença espiritual em qualquer lugar do mundo onde exista vida.
+
+Essa projeção não assume a aparência comum de espíritos ou criaturas feéricas conhecidas pelos mortais.
+
+Ela se manifesta como a própria natureza tentando assumir uma forma humanoide feminina.
+
+Sua pele possui a textura lisa e viva da madeira jovem.
+
+Seus longos cabelos são formados por um entrelaçado contínuo de folhas, flores e raízes em movimento.
+
+Galhos surgem e desaparecem constantemente ao longo de sua silhueta, fazendo com que sua forma nunca permaneça exatamente igual por dois instantes seguidos.
+
+Pequenos animais da região costumam acompanhar sua presença naturalmente, como se reconhecessem nela a própria fonte de sua existência.
+
+---
+
+## O Ciclo das Estações
+
+A projeção espiritual de Aion não possui uma aparência fixa ao longo do ano.
+
+Ela floresce, amadurece e se transforma conforme as estações e o ambiente ao seu redor.
+
+Na primavera e no verão, exibe folhas vibrantes, madeira clara e flores abertas.
+
+No outono, assume tons dourados, alaranjados e folhas que se desprendem ao vento.
+
+No inverno, manifesta-se através de galhos nus cobertos de geada, musgo escuro e flores resistentes ao frio.
+
+Dessa forma, Aion não apenas representa a Vida — ele reflete cada fase necessária para que ela continue existindo.
+
+# Kairon
+
+## O Reflexo da Morte
+
+Kairon é o Primordial que manifesta a força da Morte no mundo material.
+
+Ele não é um vilão, um juiz das almas ou um ceifador encarregado de buscar cada mortal que perece.
+
+Kairon é o complemento necessário da existência — a presença silenciosa que aguarda o momento natural em que cada ciclo deve se encerrar para que algo novo possa surgir.
+
+---
+
+## A Onipresença nas Sombras
+
+Kairon não foge da luz, pois sabe que toda luz projeta uma sombra.
+
+Ele habita toda escuridão e toda penumbra existente na criação, percorrendo e observando silenciosamente todos os cantos do mundo.
+
+Enquanto permanece diluído nas sombras, Kairon está em todos os lugares ao mesmo tempo, testemunhando o passar das eras sem interferir.
+
+---
+
+## A Projeção Física
+
+Quando decide intervir diretamente ou caminhar entre os mortais, Kairon condensa sua essência a partir de uma sombra e projeta um corpo físico.
+
+Ao assumir essa forma material, sua onipresença cessa: ele passa a estar integralmente naquele único local, sujeito às leis da realidade física — o que torna sua presença ainda mais rara e significativa.
+
+Fisicamente, Kairon apresenta-se como um humano de traços perfeitos.
+
+Não possui musculatura exagerada, mas sua postura e presença não demonstram qualquer sinal de fraqueza ou vulnerabilidade.
+
+Seus cabelos são longos e extremamente lisos, e seus olhos são inteiramente negros, profundos como a própria ausência de luz.
+
+Uma propriedade misteriosa acompanha sua manifestação: independentemente de quem esteja ao seu redor, Kairon sempre parece ser a figura mais alta do ambiente, impondo respeito e inevitabilidade sem precisar dizer uma única palavra.
+
+---
+
+## O Mimetismo das Formas
+
+Além de sua aparência humana impecável, Kairon é capaz de assumir a forma de qualquer criatura existente no mundo.
+
+Ao replicar um ser, ele reproduz fielmente sua anatomia, força e habilidades naturais.
+
+Entretanto, sua natureza impõe um limite claro: Kairon não consegue replicar poderes ou dons especiais herdados diretamente da influência de Aion ou Azeryn.
+
+Ele domina a forma e o fim de todas as coisas, mas jamais imita a essência que pertence aos outros dois Primordiais.
+
