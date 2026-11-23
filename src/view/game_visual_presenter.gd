@@ -126,8 +126,6 @@ func _tile_color(p: Vector2i) -> Color:
 		_:
 			var t := float(map.height_at(p)) / maxf(1.0, float(game_view_ref.rules.get_int("map", "max_height")))
 			c = Color(0.25, 0.5, 0.28).lerp(Color(0.8, 0.7, 0.48), t)
-	if (p.x + p.y) % 2 == 0:
-		c = c.darkened(0.06)
 	return c
 
 
@@ -196,7 +194,7 @@ func _present_reaction_event(u: Unit, kind: String, text: String) -> void:
 func build_units() -> void:
 	for u in game_view_ref.m.units:
 		var n := Node3D.new()
-		var model := CHARACTER_MODEL.create_model(TEAM_COLORS[u.team])
+		var model := CHARACTER_MODEL.create_model(TEAM_COLORS[u.team], u.job_id)
 		if model == null:
 			continue
 		CHARACTER_MODEL.set_facing(model, u.facing)
@@ -617,3 +615,5 @@ func present_turn_started(u: Unit) -> void:
 	gv.hud.set_hint("")
 	gv.hud.add_log("Vez de %s (%s)" % [u.short_name(), gv._player_name(u.team)])
 	gv.camera_rig.trigger_follow()
+
+

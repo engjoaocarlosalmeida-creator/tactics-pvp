@@ -90,6 +90,8 @@ var _shot_path := ""
 var _shot_frames := 0
 
 func _ready() -> void:
+	if not test_mode:
+		get_viewport().msaa_3d = Viewport.MSAA_2X
 	rules = Rules.load_default()
 	catalog = JobCatalog.load_default()
 	var args := {} if test_mode else LAUNCH_ARGS.parse_cmdline()
