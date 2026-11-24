@@ -141,10 +141,16 @@ func _unhandled_input(event: InputEvent) -> void:
             elif _rc_dragged:
                 get_viewport().set_input_as_handled()
         elif event.pressed and event.button_index == MOUSE_BUTTON_WHEEL_UP:
-            game_view_ref.distance = clampf(game_view_ref.distance - 2.0, 8.0, 60.0)
+            if (event.button_mask & MOUSE_BUTTON_MASK_RIGHT):
+                game_view_ref.yaw += 15.0
+            else:
+                game_view_ref.distance = clampf(game_view_ref.distance - 2.0, 8.0, 60.0)
             camera_changed.emit()
         elif event.pressed and event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
-            game_view_ref.distance = clampf(game_view_ref.distance + 2.0, 8.0, 60.0)
+            if (event.button_mask & MOUSE_BUTTON_MASK_RIGHT):
+                game_view_ref.yaw -= 15.0
+            else:
+                game_view_ref.distance = clampf(game_view_ref.distance + 2.0, 8.0, 60.0)
             camera_changed.emit()
     elif event is InputEventMouseMotion and (event.button_mask & MOUSE_BUTTON_MASK_RIGHT):
         if event.position.distance_to(_rc_start) > 6.0:

@@ -205,7 +205,8 @@ func _unhandled_input(event: InputEvent) -> void:
     if event is InputEventMouseButton and event.pressed:
         match event.button_index:
             MOUSE_BUTTON_RIGHT:
-                cancel_all()
+                if not (event.button_mask & MOUSE_BUTTON_MASK_RIGHT):
+                    cancel_all()
             MOUSE_BUTTON_LEFT:
                 var p: Vector2i = gv.pick_at(event.position)
                 if p != Picking.NONE:

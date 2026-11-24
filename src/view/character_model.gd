@@ -93,9 +93,11 @@ static func create_model(outline_color: Color, job_id: String = "", sex: String 
         model.free()
         return null
 
-    if player.has_animation_library(""):
-        player.remove_animation_library("")
-    player.add_animation_library("", lib_to_use)
+    var has_embedded := is_custom_glb and player != null and player.has_animation("Idle") and player.has_animation("walk")
+    if not has_embedded:
+        if player.has_animation_library(""):
+            player.remove_animation_library("")
+        player.add_animation_library("", lib_to_use)
 
     model.name = "Body"
     model.scale = Vector3.ONE * (1.0 if is_custom_glb else MODEL_SCALE)
@@ -243,3 +245,4 @@ static func _apply_outline(model: Node3D, outline_color: Color,
                     material.specular_mode = BaseMaterial3D.SPECULAR_DISABLED
             material.next_pass = outline_material
             mesh_instance.set_surface_override_material(surface, material)
+
