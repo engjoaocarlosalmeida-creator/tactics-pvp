@@ -211,7 +211,7 @@ func test_impacto_exibe_dano_e_inicia_queda_antes_do_fim_do_golpe() -> void:
 			"a contagem fica centralizada sobre o tile")
 	v.game_visual_presenter.update_overheads()
 	check_eq(v.unit_nodes[victim.id].get_node("Over").global_position,
-			v.unit_nodes[victim.id].global_position + Vector3(0, 0.35, 0),
+			v.unit_nodes[victim.id].global_position + Vector3(0, 0.78, 0),
 			"a contagem fica junto ao personagem caído no centro do tile")
 	var damage_visible := false
 	for child in v.overlay_root.get_children():
@@ -655,3 +655,66 @@ func test_reacoes_e_impacto_tocam_animacoes_correspondentes() -> void:
 		v.game_visual_presenter._on_unit_animation_finished(anim_name, defender.id)
 		check_eq(str(player.current_animation), "Idle", "personagem volta para Idle apos %s" % anim_name)
 	_cleanup()
+
+func _visual_height(model: Node3D) -> float:
+	var min_y := INF
+	var max_y := -INF
+	for node in model.find_children("*", "MeshInstance3D", true, false):
+		var mi := node as MeshInstance3D
+		if mi.mesh != null:
+			var aabb := mi.get_aabb()
+			var xf := mi.global_transform
+			for i in 8:
+				var pt := xf * aabb.get_endpoint(i)
+				min_y = minf(min_y, pt.y)
+				max_y = maxf(max_y, pt.y)
+	return 0.0 if min_y == INF else (max_y - min_y)
+
+func test_altura_visual_dos_modelos_segue_proporcao_do_padrao() -> void:
+	if not needs_display():
+		return
+	var v := _make()
+	v.mode = GameView.Mode.LOCAL
+	var st := _duel([[0, 0, 0, 0]], Vector2i(0, 0), Vector2i(3, 0))
+	st.units[1].job_id = "aprendiz"
+	st.units[1].look = "f"
+	v.setup_match(st)
+	var ref_h := _visual_height(v.unit_nodes[0].get_node("Body"))
+	var fem_h := _visual_height(v.unit_nodes[1].get_node("Body"))
+	check(ref_h > 0.1 and fem_h > 0.1, "modelos possuem malha mensuravel")
+	var ratio := fem_h / ref_h
+	check(ratio >= 0.35 and ratio <= 1.35, "altura da aprendiz feminina (%0.2fm) proporcional ao padrao (%0.2fm)" % [fem_h, ref_h])
+	var has_tex := false
+	for mi in v.unit_nodes[1].get_node("Body").find_children("*", "MeshInstance3D", true, false):
+		var mat := (mi as MeshInstance3D).get_active_material(0) as StandardMaterial3D
+		if mat != null and mat.albedo_texture != null:
+			has_tex = true
+	check(has_tex, "aprendiz feminina possui textura aplicada no material")
+	_cleanup()
+	check(MapGeometry.TILE_SIZE > ref_h, "tile quadrado (%0.2fm) comporta o personagem padrao caido (%0.2fm)" % [MapGeometry.TILE_SIZE, ref_h])
+	check_eq(CHARACTER_MODEL.locomotion_action(1, MapGeometry.TILE_H), "walk", "degrau abaixo do joelho usa walk")
+	check_eq(CHARACTER_MODEL.locomotion_action(2, MapGeometry.TILE_H), "jump_up", "degrau na altura do joelho ou mais usa jump_up")
+	check_eq(CHARACTER_MODEL.locomotion_action(-2, MapGeometry.TILE_H), "jump_down", "queda na altura do joelho ou mais usa jump_down")
+
+func test_ataque_corpo_a_corpo_avanca_e_longo_alcance_permanece_parado() -> void:
+	if not needs_display(): return
+	var v := _make()
+	v.mode = GameView.Mode.LOCAL
+	var st := _duel([[0, 0, 0, 0], [0, 0, 0, 0]], Vector2i(0, 0), Vector2i(1, 0))
+	st.units[0].attack_range = 1
+	v.setup_match(st)
+	v.animate = true
+	var home: Vector3 = v.unit_nodes[st.units[0].id].position
+	v.game_visual_presenter._present_attack_resolved(st.units[0], Vector2i(1, 0), st.units[1], 5, st.units[1].hp)
+	check(v.game_visual_presenter._melee_home_positions.has(st.units[0].id), "corpo a corpo registra avanco")
+	v.game_visual_presenter._finish_attack_animation(st.units[0].id, "espadada_dentroparafora")
+	check(not v.game_visual_presenter._melee_home_positions.has(st.units[0].id), "corpo a corpo limpa retorno ao finalizar")
+	st.units[0].attack_range = 3
+	v.unit_nodes[st.units[0].id].position = home
+	v.game_visual_presenter._present_attack_resolved(st.units[0], Vector2i(1, 0), st.units[1], 5, st.units[1].hp)
+	check(not v.game_visual_presenter._melee_home_positions.has(st.units[0].id), "longo alcance nao avanca para o tile alvo")
+	_cleanup()
+
+
+
+

@@ -12,11 +12,12 @@ const SPRITE_H := 1.8
 var game_view_ref
 var units_root: Node3D
 var _attack_animations := {}
+var _melee_home_positions := {}
 var _reaction_animations := {}
 var _pending_defensive_reactions := {}
 var float_log: Array = []
 const ATTACK_ANIMATIONS := ["espadada_dentroparafora", "espadada_foraparadentro"]
-const WALK_STEP_DURATION := 0.16
+const WALK_STEP_DURATION := 0.34
 const ATTACK_IMPACT_RATIO := 0.55
 const DEFENSIVE_REACTION_DELAY := 0.12
 var _attack_animation_index := {}
@@ -171,7 +172,12 @@ func _finish_attack_animation(unit_id: int, action: String) -> void:
 	if _attack_animations.has(unit_id) and _attack_animations[unit_id] == action:
 		_attack_animations.erase(unit_id)
 		if game_view_ref.unit_nodes.has(unit_id):
-			CHARACTER_MODEL.play_animation(game_view_ref.unit_nodes[unit_id].get_node("Body"), "Idle")
+			var n: Node3D = game_view_ref.unit_nodes[unit_id]
+			CHARACTER_MODEL.play_animation(n.get_node("Body"), "Idle")
+			if _melee_home_positions.has(unit_id):
+				var home: Vector3 = _melee_home_positions[unit_id]
+				_melee_home_positions.erase(unit_id)
+				create_tween().tween_property(n, "position", home, 0.24)
 		anim_done()
 
 
@@ -194,7 +200,7 @@ func _present_reaction_event(u: Unit, kind: String, text: String) -> void:
 func build_units() -> void:
 	for u in game_view_ref.m.units:
 		var n := Node3D.new()
-		var model := CHARACTER_MODEL.create_model(TEAM_COLORS[u.team], u.job_id)
+		var model := CHARACTER_MODEL.create_model(TEAM_COLORS[u.team], u.job_id, u.look)
 		if model == null:
 			continue
 		CHARACTER_MODEL.set_facing(model, u.facing)
@@ -320,14 +326,21 @@ func _animate_unit_path(u: Unit, path: Array, on_finished := Callable()) -> void
 	for point in path:
 		var step: Vector2i = point
 		var height_delta: int = game_view_ref.m.map.height_at(step) - game_view_ref.m.map.height_at(previous)
-		var action := CHARACTER_MODEL.locomotion_action(height_delta)
+		var action := CHARACTER_MODEL.locomotion_action(height_delta, MapGeometry.TILE_H)
 		var duration := WALK_STEP_DURATION
-		if height_delta != 0:
-			duration = clampf(CHARACTER_MODEL.animation_duration(body, action) * 0.3, 0.3, 0.65)
+		if action != "walk":
+			duration = clampf(CHARACTER_MODEL.animation_duration(body, action) * 0.65, 0.55, 0.95)
+		elif height_delta != 0:
+			duration = WALK_STEP_DURATION * 1.35
 		var direction := step - previous
+		var from_pos := MapGeometry.tile_pos(game_view_ref.m.map, previous)
+		var to_pos := MapGeometry.tile_pos(game_view_ref.m.map, step)
 		tw.tween_callback(_face_unit_for_step.bind(u.id, direction))
 		tw.tween_callback(_play_unit_animation.bind(u.id, action, duration))
-		tw.tween_property(node, "position", MapGeometry.tile_pos(game_view_ref.m.map, step), duration)
+		if action == "walk" and height_delta != 0:
+			tw.tween_method(_interpolate_low_step.bind(u.id, from_pos, to_pos), 0.0, 1.0, duration)
+		else:
+			tw.tween_property(node, "position", to_pos, duration)
 		previous = step
 	tw.tween_callback(_finish_unit_movement.bind(u.id))
 	tw.finished.connect(func():
@@ -376,6 +389,12 @@ func _present_attack_resolved(attacker: Unit, facing: Vector2i, target: Unit = n
 
 	_attack_animations[attacker.id] = action
 	game_view_ref.busy += 1
+	var is_melee := target != null and attacker.attack_range <= 1 and (absi(attacker.pos.x - target.pos.x) + absi(attacker.pos.y - target.pos.y) == 1)
+	if is_melee and game_view_ref.unit_nodes.has(target.id):
+		_melee_home_positions[attacker.id] = node.position
+		var target_pos: Vector3 = game_view_ref.unit_nodes[target.id].position
+		var dir_xz := Vector3(target_pos.x - node.position.x, 0.0, target_pos.z - node.position.z).normalized()
+		create_tween().tween_property(node, "position", node.position + dir_xz * (MapGeometry.TILE_SIZE * 0.38), 0.22)
 	var duration := CHARACTER_MODEL.animation_duration(node.get_node("Body"), action)
 	if target != null and _pending_defensive_reactions.has(target.id):
 		var reaction_kind := str(_pending_defensive_reactions[target.id])
@@ -615,5 +634,24 @@ func present_turn_started(u: Unit) -> void:
 	gv.hud.set_hint("")
 	gv.hud.add_log("Vez de %s (%s)" % [u.short_name(), gv._player_name(u.team)])
 	gv.camera_rig.trigger_follow()
+
+
+
+
+
+
+func _interpolate_low_step(progress: float, unit_id: int, from_pos: Vector3, to_pos: Vector3) -> void:
+	if not game_view_ref.unit_nodes.has(unit_id): return
+	var n: Node3D = game_view_ref.unit_nodes[unit_id]
+	var body := n.get_node_or_null("Body") as Node3D
+	var step_dy := to_pos.y - from_pos.y
+	var y_t := smoothstep(0.35, 0.85, progress) if step_dy > 0.0 else smoothstep(0.15, 0.65, progress)
+	n.position = Vector3(lerpf(from_pos.x, to_pos.x, progress), lerpf(from_pos.y, to_pos.y, y_t), lerpf(from_pos.z, to_pos.z, progress))
+	if body != null:
+		if progress >= 0.98:
+			CHARACTER_MODEL.clear_step_foot_ik(body)
+		else:
+			CHARACTER_MODEL.apply_step_foot_ik(body, step_dy, progress)
+
 
 

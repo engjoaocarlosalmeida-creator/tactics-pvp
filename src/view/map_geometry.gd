@@ -3,10 +3,10 @@ class_name MapGeometry
 extends RefCounted
 
 
-const TILE_H := 0.5
-const TILE_SIZE := 1.15
+const TILE_H := 0.35
+const TILE_SIZE := 2.35
 const ROCK_EXTRA := 1.0
-const SLOPE_DROP := 0.45
+const SLOPE_DROP := 0.315
 
 
 static func top_y(map: BattleMap, p: Vector2i) -> float:
@@ -60,3 +60,6 @@ static func slope_mesh(map: BattleMap, p: Vector2i) -> ArrayMesh:
             st.add_vertex(v)
     st.generate_normals()
     return st.commit()
+
+
+
