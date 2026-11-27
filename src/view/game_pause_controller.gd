@@ -2,8 +2,11 @@ class_name GamePauseController
 extends Node
 
 var pause_layer: CanvasLayer
-var game_options_menu: Control
-var game_view_ref: Control
+var game_options_menu: Node
+var game_view_ref: Node
+
+func setup(view: Node) -> void:
+	game_view_ref = view
 
 func _ready() -> void:
 	pause_layer = CanvasLayer.new()
@@ -29,7 +32,7 @@ func _ready() -> void:
 	if game_options_menu != null:
 		game_options_menu.visible = false
 		pause_layer.add_child(game_options_menu)
-		
+
 		# Conecta os sinais do menu de opções
 		game_options_menu.resume_requested.connect(toggle_pause)
 		game_options_menu.options_requested.connect(_on_options_requested)

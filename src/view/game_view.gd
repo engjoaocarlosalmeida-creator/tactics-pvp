@@ -105,8 +105,9 @@ func _ready() -> void:
 	_build_environment()
 
 	# --- Module Integration (Step 2) ---
-	# 1. Instantiate new controllers
+		# 1. Instantiate new controllers
 	game_pause_controller = GamePauseController.new()
+	game_pause_controller.setup(self)
 	add_child(game_pause_controller)
 
 	camera_rig = GAME_CAMERA_RIG.new()
